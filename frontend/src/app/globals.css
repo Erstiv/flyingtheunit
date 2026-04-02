@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0a0a0a;
+  --fg: #ededed;
+  --card: #141414;
+  --border: #262626;
+  --muted: #737373;
+  --accent: #3b82f6;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.card {
+  @apply bg-[var(--card)] border border-[var(--border)] rounded-xl p-5;
+}

@@ -1,0 +1,112 @@
+services:
+  flyingtheunit-db:
+    build:
+      context: ./db
+      dockerfile: Dockerfile
+    container_name: flyingtheunit-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-flyingtheunit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_in_production}
+      POSTGRES_DB: ${POSTGRES_DB:-flyingtheunit}
+    ports:
+      - "5435:5432"
+    volumes:
+      - ./docker-volumes/pgdata:/var/lib/postgresql/data
+      - ./db/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql
+      - ./db/migrations/002_graph_init.sql:/docker-entrypoint-initdb.d/002_graph_init.sql
+    command: >
+      postgres
+      -c shared_preload_libraries=age
+      -c search_path=ag_catalog,"$$user",public
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-flyingtheunit}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  flyingtheunit-redis:
+    image: redis:7-alpine
+    container_name: flyingtheunit-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  flyingtheunit-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: flyingtheunit-backend
+    restart: unless-stopped
+    depends_on:
+      flyingtheunit-db:
+        condition: service_healthy
+      flyingtheunit-redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-flyingtheunit}:${POSTGRES_PASSWORD:-changeme_in_production}@flyingtheunit-db:5432/${POSTGRES_DB:-flyingtheunit}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-flyingtheunit}:${POSTGRES_PASSWORD:-changeme_in_production}@flyingtheunit-db:5432/${POSTGRES_DB:-flyingtheunit}
+      REDIS_URL: redis://flyingtheunit-redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID:-}
+      REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET:-}
+      REDDIT_USER_AGENT: ${REDDIT_USER_AGENT:-}
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
+      BLUESKY_HANDLE: ${BLUESKY_HANDLE:-}
+      BLUESKY_APP_PASSWORD: ${BLUESKY_APP_PASSWORD:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    ports:
+      - "8015:8015"
+    volumes:
+      - ./backend:/app
+      - ./docker-volumes/hf-cache:/root/.cache/huggingface
+
+  flyingtheunit-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: flyingtheunit-worker
+    restart: unless-stopped
+    depends_on:
+      flyingtheunit-db:
+        condition: service_healthy
+      flyingtheunit-redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-flyingtheunit}:${POSTGRES_PASSWORD:-changeme_in_production}@flyingtheunit-db:5432/${POSTGRES_DB:-flyingtheunit}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-flyingtheunit}:${POSTGRES_PASSWORD:-changeme_in_production}@flyingtheunit-db:5432/${POSTGRES_DB:-flyingtheunit}
+      REDIS_URL: redis://flyingtheunit-redis:6379/0
+      REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID:-}
+      REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET:-}
+      REDDIT_USER_AGENT: ${REDDIT_USER_AGENT:-}
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
+      BLUESKY_HANDLE: ${BLUESKY_HANDLE:-}
+      BLUESKY_APP_PASSWORD: ${BLUESKY_APP_PASSWORD:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    command: celery -A app.worker worker --beat --loglevel=info --concurrency=2 --max-memory-per-child=512000
+    volumes:
+      - ./backend:/app
+      - ./docker-volumes/hf-cache:/root/.cache/huggingface
+
+  flyingtheunit-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: flyingtheunit-frontend
+    restart: unless-stopped
+    depends_on:
+      - flyingtheunit-backend
+    environment:
+      NEXT_PUBLIC_API_URL: ${BACKEND_URL:-http://localhost:8015}
+    ports:
+      - "3025:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
