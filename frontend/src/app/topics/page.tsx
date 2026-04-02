@@ -15,16 +15,30 @@ export default function TopicsPage() {
 
   useEffect(() => { load(); }, []);
 
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const handleCreate = async () => {
-    if (!name || !keywords) return;
-    await createTopic({
-      name,
-      keywords: keywords.split(",").map((k) => k.trim()).filter(Boolean),
-    });
-    setName("");
-    setKeywords("");
-    setShowCreate(false);
-    load();
+    if (!name.trim()) {
+      setError("Topic name is required");
+      return;
+    }
+    const kw = keywords
+      ? keywords.split(",").map((k) => k.trim()).filter(Boolean)
+      : [name.trim()];
+    setCreating(true);
+    setError(null);
+    try {
+      await createTopic({ name: name.trim(), keywords: kw });
+      setName("");
+      setKeywords("");
+      setShowCreate(false);
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -66,12 +80,15 @@ export default function TopicsPage() {
               placeholder='e.g. "AI healthcare", "medical AI", "clinical AI"'
               className="w-full mt-1 px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded-lg text-sm"
             />
+            <p className="text-xs text-[var(--muted)] mt-1">Leave blank to use the topic name as the keyword</p>
           </div>
+          {error && <p className="text-sm text-red-400">{error}</p>}
           <button
             onClick={handleCreate}
-            className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
+            disabled={creating}
+            className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50"
           >
-            Create & Start Collecting
+            {creating ? "Creating..." : "Create & Start Collecting"}
           </button>
         </div>
       )}
