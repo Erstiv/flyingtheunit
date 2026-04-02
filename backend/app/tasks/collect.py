@@ -1,7 +1,7 @@
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import select, text
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import text
 from app.worker import celery_app
 from app.core.config import get_settings
 from app.adapters.reddit import RedditAdapter
@@ -27,23 +27,6 @@ def get_sync_session():
 def store_posts(session, posts: list[RawPost], topic_id: str):
     """Store collected posts and link them to the topic."""
     for raw in posts:
-        # Upsert post
-        stmt = insert(text("posts")).values(
-            platform=raw.platform,
-            platform_id=raw.platform_id,
-            author_id=raw.author_id,
-            author_username=raw.author_username,
-            author_display_name=raw.author_display_name,
-            content=raw.content,
-            content_html=raw.content_html,
-            url=raw.url,
-            media_urls=raw.media_urls,
-            engagement=raw.engagement,
-            raw_metadata=raw.raw_metadata,
-            created_at=raw.created_at,
-        )
-
-        # Use raw SQL for upsert since we need RETURNING
         result = session.execute(text("""
             INSERT INTO posts (platform, platform_id, author_id, author_username,
                 author_display_name, content, content_html, url, media_urls,
@@ -65,8 +48,8 @@ def store_posts(session, posts: list[RawPost], topic_id: str):
             "content_html": raw.content_html,
             "url": raw.url,
             "media_urls": raw.media_urls or [],
-            "engagement": raw.engagement,
-            "raw_metadata": raw.raw_metadata,
+            "engagement": json.dumps(raw.engagement),
+            "raw_metadata": json.dumps(raw.raw_metadata),
             "created_at": raw.created_at,
         })
 
