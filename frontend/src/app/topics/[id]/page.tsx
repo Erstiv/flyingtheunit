@@ -160,18 +160,35 @@ export default function TopicDetailPage() {
                   )}
                 </div>
                 {post.sentiment_label && (
-                  <span
-                    className="shrink-0 px-2 py-1 rounded text-xs capitalize"
-                    style={{
-                      backgroundColor: `${
-                        SENTIMENT_COLORS[post.sentiment_label as keyof typeof SENTIMENT_COLORS] || "#6B7280"
-                      }20`,
-                      color:
-                        SENTIMENT_COLORS[post.sentiment_label as keyof typeof SENTIMENT_COLORS] || "#6B7280",
-                    }}
-                  >
-                    {post.sentiment_label} ({post.sentiment_score?.toFixed(2)})
-                  </span>
+                  <div className="shrink-0 text-right space-y-1">
+                    <span
+                      className="inline-block px-2 py-1 rounded text-xs capitalize"
+                      style={{
+                        backgroundColor: `${
+                          SENTIMENT_COLORS[post.sentiment_label as keyof typeof SENTIMENT_COLORS] || "#6B7280"
+                        }20`,
+                        color:
+                          SENTIMENT_COLORS[post.sentiment_label as keyof typeof SENTIMENT_COLORS] || "#6B7280",
+                      }}
+                    >
+                      {post.sentiment_label} ({post.sentiment_score?.toFixed(2)})
+                    </span>
+                    {post.emotions && Object.keys(post.emotions).length > 0 && (
+                      <div className="text-[10px] text-[var(--muted)] space-y-0.5">
+                        {post.emotions.positive > 0 && <div>+positive: {(post.emotions.positive * 100).toFixed(0)}%</div>}
+                        {post.emotions.negative > 0 && <div>-negative: {(post.emotions.negative * 100).toFixed(0)}%</div>}
+                        {post.emotions.neutral > 0 && <div>~neutral: {(post.emotions.neutral * 100).toFixed(0)}%</div>}
+                      </div>
+                    )}
+                    {post.engagement && (
+                      <div className="text-[10px] text-[var(--muted)]">
+                        {Object.entries(post.engagement)
+                          .filter(([_, v]) => (v as number) > 0)
+                          .map(([k, v]) => `${v} ${k}`)
+                          .join(" / ")}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
               {post.url && (

@@ -6,12 +6,16 @@ from app.worker import celery_app
 from app.core.config import get_settings
 from app.adapters.reddit import RedditAdapter
 from app.adapters.youtube import YouTubeAdapter
+from app.adapters.bluesky import BlueskyAdapter
+from app.adapters.hackernews import HackerNewsAdapter
 from app.adapters.base import RawPost
 
 # Registry of available adapters
 ADAPTERS = {
     "reddit": RedditAdapter,
     "youtube": YouTubeAdapter,
+    "bluesky": BlueskyAdapter,
+    "hackernews": HackerNewsAdapter,
 }
 
 
@@ -69,7 +73,7 @@ def store_posts(session, posts: list[RawPost], topic_id: str):
 @celery_app.task(name="app.tasks.collect.collect_for_topic")
 def collect_for_topic(topic_id: str, topic_name: str, keywords: list[str], platforms: list[str]):
     """Collect posts for a single topic from all configured adapters."""
-    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    since = datetime.now(timezone.utc) - timedelta(days=7)
     total_collected = 0
 
     session = get_sync_session()

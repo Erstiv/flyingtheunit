@@ -41,11 +41,12 @@ def process_unanalyzed_posts(batch_size: int = 50):
 
             # Store analysis
             session.execute(text("""
-                INSERT INTO post_analysis (post_id, sentiment_score, sentiment_label, entities, embedding)
-                VALUES (:post_id, :score, :label, :entities, :embedding)
+                INSERT INTO post_analysis (post_id, sentiment_score, sentiment_label, emotions, entities, embedding)
+                VALUES (:post_id, :score, :label, :emotions, :entities, :embedding)
                 ON CONFLICT (post_id) DO UPDATE SET
                     sentiment_score = EXCLUDED.sentiment_score,
                     sentiment_label = EXCLUDED.sentiment_label,
+                    emotions = EXCLUDED.emotions,
                     entities = EXCLUDED.entities,
                     embedding = EXCLUDED.embedding,
                     analyzed_at = NOW()
@@ -53,6 +54,7 @@ def process_unanalyzed_posts(batch_size: int = 50):
                 "post_id": str(post_id),
                 "score": sentiment["score"],
                 "label": sentiment["label"],
+                "emotions": json.dumps(sentiment.get("detail", {})),
                 "entities": json.dumps(entities),
                 "embedding": str(embedding),
             })
