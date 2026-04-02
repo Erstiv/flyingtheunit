@@ -1,3 +1,4 @@
+import json
 from sqlalchemy import text
 from app.worker import celery_app
 from app.tasks.collect import get_sync_session
@@ -52,7 +53,7 @@ def process_unanalyzed_posts(batch_size: int = 50):
                 "post_id": str(post_id),
                 "score": sentiment["score"],
                 "label": sentiment["label"],
-                "entities": entities,
+                "entities": json.dumps(entities),
                 "embedding": str(embedding),
             })
             processed += 1
