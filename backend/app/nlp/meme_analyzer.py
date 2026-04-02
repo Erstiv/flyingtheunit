@@ -58,6 +58,7 @@ async def analyze_meme_image(image_url: str) -> dict | None:
                     "generationConfig": {
                         "temperature": 0.1,
                         "maxOutputTokens": 500,
+                        "responseMimeType": "application/json",
                     },
                 },
                 timeout=30,
@@ -67,14 +68,6 @@ async def analyze_meme_image(image_url: str) -> dict | None:
 
             # Extract text from response
             text = result["candidates"][0]["content"]["parts"][0]["text"]
-            # Clean markdown code fences if present
-            text = text.strip()
-            if text.startswith("```"):
-                text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-            if text.endswith("```"):
-                text = text[:-3]
-            text = text.strip()
-
             return json.loads(text)
 
     except Exception as e:
@@ -111,18 +104,18 @@ Return ONLY JSON."""
                 f"{GEMINI_API}?key={settings.gemini_api_key}",
                 json={
                     "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"temperature": 0.1, "maxOutputTokens": 300},
+                    "generationConfig": {
+                        "temperature": 0.1,
+                        "maxOutputTokens": 300,
+                        "responseMimeType": "application/json",
+                    },
                 },
                 timeout=20,
             )
             resp.raise_for_status()
             result = resp.json()
-            text = result["candidates"][0]["content"]["parts"][0]["text"].strip()
-            if text.startswith("```"):
-                text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-            if text.endswith("```"):
-                text = text[:-3]
-            return json.loads(text.strip())
+            text = result["candidates"][0]["content"]["parts"][0]["text"]
+            return json.loads(text)
     except Exception as e:
         print(f"Meme text analysis failed: {e}")
         return None
