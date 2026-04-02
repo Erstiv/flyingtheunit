@@ -2,7 +2,7 @@ import json
 import httpx
 from app.core.config import get_settings
 
-GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent"
 
 MEME_ANALYSIS_PROMPT = """Analyze this meme image. Return a JSON object with these fields:
 
@@ -66,8 +66,12 @@ async def analyze_meme_image(image_url: str) -> dict | None:
             gemini_resp.raise_for_status()
             result = gemini_resp.json()
 
-            # Extract text from response
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
+            # Extract text from response — handle multi-part (thinking model)
+            parts = result["candidates"][0]["content"]["parts"]
+            text = ""
+            for part in parts:
+                if "text" in part:
+                    text = part["text"]  # take the last text part (the answer)
             return json.loads(text)
 
     except Exception as e:
@@ -114,7 +118,11 @@ Return ONLY JSON."""
             )
             resp.raise_for_status()
             result = resp.json()
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
+            parts = result["candidates"][0]["content"]["parts"]
+            text = ""
+            for part in parts:
+                if "text" in part:
+                    text = part["text"]
             return json.loads(text)
     except Exception as e:
         print(f"Meme text analysis failed: {e}")
