@@ -2,7 +2,7 @@ import json
 import httpx
 from app.core.config import get_settings
 
-GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
 MEME_ANALYSIS_PROMPT = """Analyze this meme image. Return a JSON object with these fields:
 
