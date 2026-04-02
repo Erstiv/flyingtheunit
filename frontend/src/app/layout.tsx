@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: "/topics", label: "Topics" },
   { href: "/entities", label: "Entities" },
   { href: "/memes", label: "Meme Lab" },
+  { href: "/characters", label: "Characters" },
   { href: "/graph", label: "Graph" },
   { href: "/search", label: "Search" },
   { href: "/alerts", label: "Alerts" },

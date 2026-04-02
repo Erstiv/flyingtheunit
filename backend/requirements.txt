@@ -20,5 +20,9 @@ vaderSentiment==3.3.2
 spacy==3.7.6
 sentence-transformers==3.3.1
 
+# Meme engine
+imagehash==4.3.1
+Pillow==10.4.0
+
 # Utilities
 python-dateutil==2.9.0
