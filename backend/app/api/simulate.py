@@ -1,0 +1,331 @@
+"""Meme Pipeline Simulation — step-by-step demo without posting."""
+import json
+import httpx
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import get_db
+from app.core.config import get_settings
+from app.nlp.sentiment import analyze_sentiment
+from app.nlp.ner import extract_entities
+
+router = APIRouter()
+
+NARRALYTICA_API = "http://localhost:8005"
+GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent"
+
+
+class SimulateRequest(BaseModel):
+    """Simulate a social media post for the meme pipeline."""
+    post_text: str
+    post_author: str = "u/wayfinders_fan_42"
+    platform: str = "reddit"
+    meme_template: str | None = None  # optional override
+    image_url: str | None = None
+    property_name: str = "The Wayfinders"
+    show_id: int = 7  # Narralytica show ID
+
+
+@router.post("/run")
+async def simulate_pipeline(req: SimulateRequest, db: AsyncSession = Depends(get_db)):
+    """Run the full meme pipeline on a simulated post, returning each step's output.
+
+    Returns a step-by-step breakdown:
+    1. Post detected
+    2. Sentiment analyzed
+    3. Entities extracted
+    4. Meme identified (via Gemini)
+    5. Scenes matched from Narralytica
+    6. Text options generated
+    7. Ready for approval
+    """
+    settings = get_settings()
+    steps = []
+
+    # ── Step 1: Post Detected ──
+    steps.append({
+        "step": 1,
+        "title": "Post Detected",
+        "description": f"Found a post on {req.platform} mentioning {req.property_name}",
+        "data": {
+            "platform": req.platform,
+            "author": req.post_author,
+            "content": req.post_text,
+            "image_url": req.image_url,
+        }
+    })
+
+    # ── Step 2: Sentiment Analysis ──
+    sentiment = analyze_sentiment(req.post_text)
+    steps.append({
+        "step": 2,
+        "title": "Sentiment Analyzed",
+        "description": f"Post is {sentiment['label']} (score: {sentiment['score']:.2f})",
+        "data": sentiment,
+    })
+
+    # ── Step 3: Entity Extraction ──
+    entities = extract_entities(req.post_text)
+    steps.append({
+        "step": 3,
+        "title": "Entities Extracted",
+        "description": f"Found {len(entities)} entities",
+        "data": {"entities": entities},
+    })
+
+    # ── Step 4: Meme Identification ──
+    meme_info = None
+    if req.meme_template:
+        meme_info = {
+            "template_name": req.meme_template,
+            "is_meme": True,
+            "meme_description": f"A {req.meme_template} meme about {req.property_name}",
+            "humor_type": "celebratory",
+            "target_sentiment": sentiment["label"],
+        }
+    elif settings.gemini_api_key:
+        # Ask Gemini to analyze the post for meme content
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                prompt = f"""Analyze this social media post. Is it a meme or meme-like? What meme template would work best as a response?
+
+Post: "{req.post_text}"
+Platform: {req.platform}
+Topic: {req.property_name}
+
+Return JSON:
+{{
+  "is_meme": true/false,
+  "original_template": "meme template used in the post (if any)",
+  "best_response_template": "best meme template for responding to this (e.g. Drake Hotline Bling, Distracted Boyfriend, Change My Mind, etc.)",
+  "meme_description": "what the post is saying about {req.property_name}",
+  "humor_type": "satirical/celebratory/mocking/wholesome/sarcastic",
+  "target_sentiment": "positive/negative/neutral",
+  "response_angle": "brief description of how to respond to this with a meme"
+}}"""
+
+                resp = await client.post(
+                    f"{GEMINI_API}?key={settings.gemini_api_key}",
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 300, "responseMimeType": "application/json"},
+                    },
+                    timeout=20,
+                )
+                resp.raise_for_status()
+                result = resp.json()
+                parts = result["candidates"][0]["content"]["parts"]
+                text_out = ""
+                for part in parts:
+                    if "text" in part:
+                        text_out = part["text"]
+                meme_info = json.loads(text_out)
+        except Exception as e:
+            meme_info = {
+                "is_meme": False,
+                "best_response_template": "Drake Hotline Bling",
+                "error": str(e),
+            }
+
+    if not meme_info:
+        meme_info = {"is_meme": False, "best_response_template": "Drake Hotline Bling"}
+
+    template_name = meme_info.get("best_response_template") or meme_info.get("original_template") or "Drake Hotline Bling"
+
+    steps.append({
+        "step": 4,
+        "title": "Meme Identified",
+        "description": f"Best response template: {template_name}",
+        "data": meme_info,
+    })
+
+    # ── Step 5: Scene Matching from Narralytica ──
+    # Generate panel queries
+    panel_queries = []
+    if settings.gemini_api_key:
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                prompt = f"""For a "{template_name}" meme response about "{req.property_name}", I need to find matching video scenes.
+
+The original post said: "{req.post_text}"
+Response angle: {meme_info.get("response_angle", "positive response celebrating the show")}
+
+Generate 2 search queries to find matching emotional scenes from the TV show "{req.property_name}".
+Each query should describe the mood/emotion needed for that panel (5-15 words).
+
+Return a JSON array of 2 strings. Example:
+["character looking frustrated or disappointed with something", "character celebrating or looking triumphant and happy"]"""
+
+                resp = await client.post(
+                    f"{GEMINI_API}?key={settings.gemini_api_key}",
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 150, "responseMimeType": "application/json"},
+                    },
+                    timeout=20,
+                )
+                resp.raise_for_status()
+                result = resp.json()
+                parts = result["candidates"][0]["content"]["parts"]
+                text_out = ""
+                for part in parts:
+                    if "text" in part:
+                        text_out = part["text"]
+                panel_queries = json.loads(text_out)
+        except Exception as e:
+            panel_queries = ["character looking disappointed or sad", "character looking excited or happy"]
+    else:
+        panel_queries = ["character looking disappointed or sad", "character looking excited or happy"]
+
+    # Search Narralytica for each panel
+    scenes = []
+    for i, query in enumerate(panel_queries):
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                resp = await client.post(
+                    f"{NARRALYTICA_API}/api/search/",
+                    json={"query": query, "show_id": req.show_id, "limit": 3},
+                    timeout=20,
+                )
+                resp.raise_for_status()
+                results = resp.json()
+                panel_scenes = []
+                for r in results[:3]:
+                    scene = r.get("scene", {})
+                    panel_scenes.append({
+                        "scene_id": scene.get("id"),
+                        "description": scene.get("description_text", "")[:200],
+                        "mood": scene.get("mood_ambience"),
+                        "tone": scene.get("tone"),
+                        "characters": scene.get("characters_present", []),
+                        "similarity": round(r.get("similarity", 0), 3),
+                        "thumbnail_url": f"{NARRALYTICA_API}/api/media/thumbs/scene_{scene.get('id', 0):03d}.jpg",
+                        "episode": r.get("episode_label", ""),
+                    })
+                scenes.append({
+                    "panel": i + 1,
+                    "query": query,
+                    "matches": panel_scenes,
+                    "selected": panel_scenes[0] if panel_scenes else None,
+                })
+        except Exception as e:
+            scenes.append({"panel": i + 1, "query": query, "matches": [], "error": str(e)})
+
+    steps.append({
+        "step": 5,
+        "title": "Scenes Matched",
+        "description": f"Found {sum(len(s.get('matches', [])) for s in scenes)} matching scenes across {len(scenes)} panels",
+        "data": {"panels": scenes},
+    })
+
+    # ── Step 6: Generate Text Options ──
+    text_options = []
+    if settings.gemini_api_key:
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                # Generate 3 different text options with different tones
+                for tone in ["snarky superfan", "wholesome enthusiast", "lore nerd"]:
+                    prompt = f"""You are a "{tone}" fan account for the TV show "{req.property_name}".
+
+Someone posted: "{req.post_text}"
+You're making a "{template_name}" meme response.
+
+Write meme text for the 2 panels. Keep each line under 10 words. Be funny and relevant.
+
+Return JSON: {{"top_text": "...", "bottom_text": "...", "tone": "{tone}"}}"""
+
+                    resp = await client.post(
+                        f"{GEMINI_API}?key={settings.gemini_api_key}",
+                        json={
+                            "contents": [{"parts": [{"text": prompt}]}],
+                            "generationConfig": {"temperature": 0.9, "maxOutputTokens": 150, "responseMimeType": "application/json"},
+                        },
+                        timeout=15,
+                    )
+                    resp.raise_for_status()
+                    result = resp.json()
+                    parts = result["candidates"][0]["content"]["parts"]
+                    text_out = ""
+                    for part in parts:
+                        if "text" in part:
+                            text_out = part["text"]
+                    option = json.loads(text_out)
+                    option["tone"] = tone
+                    text_options.append(option)
+        except Exception as e:
+            text_options = [
+                {"top_text": "WHEN SOMEONE SAYS THEY HAVEN'T WATCHED IT", "bottom_text": "ME PLANNING A 12 HOUR MARATHON", "tone": "enthusiast"},
+            ]
+    else:
+        text_options = [
+            {"top_text": "THEM: IT'S JUST ANOTHER FANTASY SHOW", "bottom_text": "ME: YOU CLEARLY HAVEN'T MET THE CREW", "tone": "snarky"},
+        ]
+
+    steps.append({
+        "step": 6,
+        "title": "Text Options Generated",
+        "description": f"Generated {len(text_options)} text variations in different character voices",
+        "data": {"options": text_options},
+    })
+
+    # ── Step 7: Ready for Approval ──
+    steps.append({
+        "step": 7,
+        "title": "Ready for Approval",
+        "description": "Select your preferred text and scenes, then approve to queue for posting",
+        "data": {
+            "template": template_name,
+            "status": "pending_review",
+            "actions": ["approve", "edit", "reject", "regenerate"],
+        },
+    })
+
+    return {
+        "simulation": True,
+        "steps": steps,
+        "summary": {
+            "post": req.post_text,
+            "property": req.property_name,
+            "sentiment": sentiment["label"],
+            "template": template_name,
+            "scenes_found": sum(len(s.get("matches", [])) for s in scenes),
+            "text_options": len(text_options),
+        },
+    }
+
+
+# Preset simulations for demo
+PRESET_POSTS = [
+    {
+        "name": "Positive Fan Meme",
+        "post_text": "I can't stop rewatching The Wayfinders. Every time I notice something new. This show is genuinely better than most big-budget fantasy series and it's not even close.",
+        "post_author": "u/wayfinders_obsessed",
+        "platform": "reddit",
+    },
+    {
+        "name": "Negative Criticism",
+        "post_text": "Honestly The Wayfinders season 1 was overhyped. The pacing was slow and the CGI looked cheap compared to what Disney and Netflix are doing. Not sure why everyone keeps recommending it.",
+        "post_author": "u/honest_tv_reviews",
+        "platform": "reddit",
+    },
+    {
+        "name": "Meme Post (Drake)",
+        "post_text": "Watching generic streaming fantasy shows vs Watching The Wayfinders for the 5th time this month",
+        "post_author": "u/meme_lord_tv",
+        "platform": "reddit",
+        "meme_template": "Drake Hotline Bling",
+    },
+    {
+        "name": "YouTube Comment",
+        "post_text": "This scene made me cry actual tears. The way they animated Zaya's face when she realizes what she has to do... Angel Studios doesn't get enough credit for what they've done here.",
+        "post_author": "AnimationFanatic",
+        "platform": "youtube",
+    },
+]
+
+
+@router.get("/presets")
+async def get_preset_posts():
+    """Get preset simulated posts for demo."""
+    return PRESET_POSTS

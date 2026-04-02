@@ -1,324 +1,300 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getTopics } from "@/lib/api";
+import { useState } from "react";
 import { PLATFORM_COLORS, SENTIMENT_COLORS } from "@/lib/platform-colors";
 
-export default function MemeLab() {
-  const [topics, setTopics] = useState<any[]>([]);
-  const [selectedTopic, setSelectedTopic] = useState("");
-  const [memes, setMemes] = useState<any[]>([]);
-  const [templates, setTemplates] = useState<any[]>([]);
-  const [templateStats, setTemplateStats] = useState<any[]>([]);
-  const [queue, setQueue] = useState<any[]>([]);
+const PRESETS = [
+  {
+    name: "Positive Fan Post",
+    post_text: "I can't stop rewatching The Wayfinders. Every time I notice something new. This show is genuinely better than most big-budget fantasy series and it's not even close.",
+    post_author: "u/wayfinders_obsessed",
+    platform: "reddit",
+  },
+  {
+    name: "Negative Criticism",
+    post_text: "Honestly The Wayfinders season 1 was overhyped. The pacing was slow and the CGI looked cheap compared to what Disney and Netflix are doing. Not sure why everyone keeps recommending it.",
+    post_author: "u/honest_tv_reviews",
+    platform: "reddit",
+  },
+  {
+    name: "Meme Post (Drake)",
+    post_text: "Watching generic streaming fantasy shows vs Watching The Wayfinders for the 5th time this month",
+    post_author: "u/meme_lord_tv",
+    platform: "reddit",
+    meme_template: "Drake Hotline Bling",
+  },
+  {
+    name: "YouTube Comment",
+    post_text: "This scene made me cry actual tears. The way they animated Zaya's face when she realizes what she has to do... Angel Studios doesn't get enough credit for what they've done here.",
+    post_author: "AnimationFanatic",
+    platform: "youtube",
+  },
+];
+
+export default function MemeLabPage() {
+  const [customPost, setCustomPost] = useState("");
+  const [customAuthor, setCustomAuthor] = useState("u/test_user");
+  const [customPlatform, setCustomPlatform] = useState("reddit");
+  const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<"discover" | "create" | "queue">("discover");
+  const [currentStep, setCurrentStep] = useState(0);
+  const [selectedText, setSelectedText] = useState<number | null>(null);
+  const [selectedScenes, setSelectedScenes] = useState<Record<number, number>>({});
 
-  // Create meme form
-  const [selectedTemplate, setSelectedTemplate] = useState("");
-  const [topText, setTopText] = useState("");
-  const [bottomText, setBottomText] = useState("");
-  const [generating, setGenerating] = useState(false);
-
-  useEffect(() => {
-    getTopics().then(setTopics);
-    fetch("/api/memes/queue").then(r => r.json()).then(setQueue);
-  }, []);
-
-  const loadMemes = async (topicId: string) => {
+  const runSimulation = async (post: any) => {
     setLoading(true);
+    setResult(null);
+    setCurrentStep(0);
+    setSelectedText(null);
+    setSelectedScenes({});
     try {
-      const [memesRes, statsRes] = await Promise.all([
-        fetch(`/api/memes/trending/${topicId}`).then(r => r.json()),
-        fetch(`/api/memes/template-stats/${topicId}`).then(r => r.json()),
-      ]);
-      setMemes(memesRes);
-      setTemplateStats(statsRes);
-    } catch (e) {
-      console.error(e);
-    }
-    setLoading(false);
-  };
-
-  const loadTemplates = async () => {
-    if (templates.length > 0) return;
-    const data = await fetch("/api/memes/templates").then(r => r.json());
-    setTemplates(data);
-  };
-
-  const handleGenerate = async () => {
-    if (!selectedTemplate || (!topText && !bottomText)) return;
-    setGenerating(true);
-    try {
-      const res = await fetch("/api/memes/generate", {
+      const resp = await fetch("/api/simulate/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          template_id: selectedTemplate,
-          top_text: topText,
-          bottom_text: bottomText,
-          topic_id: selectedTopic || null,
-          target_platforms: ["reddit", "imgur"],
+          post_text: post.post_text || customPost,
+          post_author: post.post_author || customAuthor,
+          platform: post.platform || customPlatform,
+          meme_template: post.meme_template || null,
+          property_name: "The Wayfinders",
+          show_id: 7,
         }),
       });
-      const data = await res.json();
-      if (data.url) {
-        window.open(data.url, "_blank");
+      const data = await resp.json();
+      setResult(data);
+      for (let i = 0; i < data.steps.length; i++) {
+        await new Promise((r) => setTimeout(r, 600));
+        setCurrentStep(i + 1);
       }
-      // Refresh queue
-      const q = await fetch("/api/memes/queue").then(r => r.json());
-      setQueue(q);
-      setTopText("");
-      setBottomText("");
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+    } finally {
+      setLoading(false);
     }
-    setGenerating(false);
-  };
-
-  const handleApprove = async (memeId: string) => {
-    await fetch(`/api/memes/queue/${memeId}/approve`, { method: "POST" });
-    const q = await fetch("/api/memes/queue").then(r => r.json());
-    setQueue(q);
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 max-w-4xl">
+      <div>
         <h1 className="text-2xl font-bold">Meme Lab</h1>
-        <select
-          value={selectedTopic}
-          onChange={(e) => {
-            setSelectedTopic(e.target.value);
-            if (e.target.value) loadMemes(e.target.value);
-          }}
-          className="px-3 py-1.5 bg-[var(--card)] border border-[var(--border)] rounded-lg text-sm"
-        >
-          <option value="">Select a topic...</option>
-          {topics.map((t) => (
-            <option key={t.id} value={t.id}>{t.name}</option>
-          ))}
-        </select>
+        <p className="text-sm text-[var(--muted)] mt-1">
+          Simulate the full pipeline: detect &rarr; analyze &rarr; identify &rarr; match scenes &rarr; generate &rarr; approve
+        </p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-[var(--card)] p-1 rounded-lg w-fit">
-        {(["discover", "create", "queue"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => {
-              setTab(t);
-              if (t === "create") loadTemplates();
-            }}
-            className={`px-4 py-1.5 rounded text-sm capitalize transition-colors ${
-              tab === t ? "bg-blue-600 text-white" : "text-[var(--muted)] hover:text-white"
-            }`}
-          >
-            {t === "queue" ? `Queue (${queue.length})` : t}
-          </button>
-        ))}
-      </div>
-
-      {/* Template Stats */}
-      {tab === "discover" && templateStats.length > 0 && (
-        <div className="card">
-          <h3 className="text-sm font-medium text-[var(--muted)] mb-3">Trending Templates</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {templateStats.map((ts, i) => (
-              <div key={i} className="flex items-center justify-between p-2 bg-[var(--bg)] rounded-lg">
-                <div>
-                  <span className="text-sm font-medium">{ts.template_name}</span>
-                  <span className="text-xs text-[var(--muted)] ml-2">{ts.humor_type}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-[var(--muted)]">{ts.usage_count}x</span>
-                  <span
-                    className="text-xs"
-                    style={{
-                      color: ts.avg_sentiment > 0.05 ? SENTIMENT_COLORS.positive
-                        : ts.avg_sentiment < -0.05 ? SENTIMENT_COLORS.negative
-                        : SENTIMENT_COLORS.neutral,
-                    }}
-                  >
-                    {ts.avg_sentiment > 0 ? "+" : ""}{ts.avg_sentiment.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Discover tab */}
-      {tab === "discover" && (
-        <div className="space-y-3">
-          {loading && <p className="text-[var(--muted)]">Loading memes...</p>}
-          {!selectedTopic && !loading && (
-            <div className="card text-center py-12">
-              <p className="text-[var(--muted)]">Select a topic to discover memes about it</p>
-            </div>
-          )}
-          {memes.map((meme, i) => (
-            <div key={i} className="card flex gap-4">
-              {/* Image */}
-              {meme.image_url && (
-                <div className="shrink-0">
-                  <img
-                    src={meme.image_url}
-                    alt={meme.meme_description || "meme"}
-                    className="w-32 h-32 object-cover rounded-lg"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                  />
-                </div>
-              )}
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 text-sm mb-1">
-                  <span
-                    className="px-2 py-0.5 rounded text-xs"
-                    style={{
-                      backgroundColor: `${PLATFORM_COLORS[meme.platform] || "#6B7280"}20`,
-                      color: PLATFORM_COLORS[meme.platform] || "#6B7280",
-                    }}
-                  >
-                    {meme.platform}
-                  </span>
-                  <span className="font-medium">{meme.author || "unknown"}</span>
-                  {meme.template_name && (
-                    <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 rounded text-xs">
-                      {meme.template_name}
-                    </span>
-                  )}
-                  {meme.humor_type && (
-                    <span className="text-xs text-[var(--muted)]">{meme.humor_type}</span>
-                  )}
-                </div>
-                {meme.meme_description && (
-                  <p className="text-sm text-[var(--muted)] mb-1">{meme.meme_description}</p>
-                )}
-                <p className="text-sm line-clamp-2">{meme.content}</p>
-                <div className="flex items-center gap-3 mt-2 text-xs text-[var(--muted)]">
-                  {meme.target_sentiment && (
-                    <span
-                      style={{
-                        color: SENTIMENT_COLORS[meme.target_sentiment as keyof typeof SENTIMENT_COLORS] || "#6B7280",
-                      }}
-                    >
-                      {meme.target_sentiment}
-                    </span>
-                  )}
-                  {Object.entries(meme.engagement || {})
-                    .filter(([_, v]) => (v as number) > 0)
-                    .slice(0, 3)
-                    .map(([k, v]) => (
-                      <span key={k}>{v as number} {k}</span>
-                    ))}
-                  {meme.url && (
-                    <a href={meme.url} target="_blank" className="text-blue-400 hover:underline">
-                      View original
-                    </a>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Create tab */}
-      {tab === "create" && (
-        <div className="card space-y-4">
-          <h3 className="text-sm font-medium">Create a Meme</h3>
-          <div>
-            <label className="text-sm text-[var(--muted)]">Template</label>
-            <select
-              value={selectedTemplate}
-              onChange={(e) => setSelectedTemplate(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded-lg text-sm"
+      {/* Preset posts */}
+      <div className="card">
+        <h3 className="text-sm font-medium text-[var(--muted)] mb-3">Quick Test &mdash; Preset Posts</h3>
+        <div className="grid grid-cols-2 gap-2">
+          {PRESETS.map((preset, i) => (
+            <button
+              key={i}
+              onClick={() => runSimulation(preset)}
+              disabled={loading}
+              className="text-left p-3 bg-[var(--bg)] border border-[var(--border)] rounded-lg hover:border-blue-500 transition-colors disabled:opacity-50"
             >
-              <option value="">Choose a template...</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </div>
-          {selectedTemplate && templates.find(t => t.id === selectedTemplate) && (
-            <img
-              src={templates.find(t => t.id === selectedTemplate)?.url}
-              alt="template preview"
-              className="w-48 rounded-lg"
-            />
-          )}
-          <div>
-            <label className="text-sm text-[var(--muted)]">Top Text</label>
-            <input
-              value={topText}
-              onChange={(e) => setTopText(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded-lg text-sm"
-              placeholder="Top text..."
-            />
-          </div>
-          <div>
-            <label className="text-sm text-[var(--muted)]">Bottom Text</label>
-            <input
-              value={bottomText}
-              onChange={(e) => setBottomText(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded-lg text-sm"
-              placeholder="Bottom text..."
-            />
-          </div>
-          <button
-            onClick={handleGenerate}
-            disabled={generating || !selectedTemplate}
-            className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50"
-          >
-            {generating ? "Generating..." : "Generate & Queue"}
+              <div className="text-sm font-medium">{preset.name}</div>
+              <div className="text-xs text-[var(--muted)] mt-1 line-clamp-2">{preset.post_text}</div>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-[10px] px-1.5 py-0.5 rounded" style={{
+                  backgroundColor: `${PLATFORM_COLORS[preset.platform] || "#6B7280"}20`,
+                  color: PLATFORM_COLORS[preset.platform] || "#6B7280",
+                }}>{preset.platform}</span>
+                <span className="text-[10px] text-[var(--muted)]">{preset.post_author}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Custom post */}
+      <div className="card">
+        <h3 className="text-sm font-medium text-[var(--muted)] mb-3">Custom Post</h3>
+        <textarea
+          value={customPost}
+          onChange={(e) => setCustomPost(e.target.value)}
+          placeholder="Paste or write a post mentioning The Wayfinders..."
+          rows={3}
+          className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded-lg text-sm"
+        />
+        <div className="flex gap-2 mt-2">
+          <input value={customAuthor} onChange={(e) => setCustomAuthor(e.target.value)}
+            className="px-3 py-1.5 bg-[var(--bg)] border border-[var(--border)] rounded-lg text-sm w-40" />
+          <select value={customPlatform} onChange={(e) => setCustomPlatform(e.target.value)}
+            className="px-3 py-1.5 bg-[var(--bg)] border border-[var(--border)] rounded-lg text-sm">
+            <option value="reddit">Reddit</option>
+            <option value="youtube">YouTube</option>
+            <option value="twitter">X/Twitter</option>
+            <option value="instagram">Instagram</option>
+          </select>
+          <button onClick={() => runSimulation({ post_text: customPost, post_author: customAuthor, platform: customPlatform })}
+            disabled={loading || !customPost.trim()}
+            className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+            {loading ? "Running Pipeline..." : "Run Simulation"}
           </button>
         </div>
-      )}
+      </div>
 
-      {/* Queue tab */}
-      {tab === "queue" && (
-        <div className="space-y-3">
-          {queue.length === 0 ? (
-            <div className="card text-center py-8">
-              <p className="text-[var(--muted)]">No memes in the queue. Create one first!</p>
-            </div>
-          ) : (
-            queue.map((meme) => (
-              <div key={meme.id} className="card flex items-center justify-between">
-                <div>
-                  <div className="font-medium text-sm">{meme.template_name}</div>
-                  <div className="text-xs text-[var(--muted)] mt-1">
-                    {meme.top_text && <span>Top: "{meme.top_text}" </span>}
-                    {meme.bottom_text && <span>Bottom: "{meme.bottom_text}"</span>}
-                  </div>
-                  {meme.image_url && (
-                    <a href={meme.image_url} target="_blank" className="text-xs text-blue-400 hover:underline">
-                      Preview
-                    </a>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2 py-1 rounded ${
-                    meme.status === "draft" ? "bg-yellow-500/10 text-yellow-400" :
-                    meme.status === "approved" ? "bg-green-500/10 text-green-400" :
-                    "bg-gray-500/10 text-gray-400"
-                  }`}>
-                    {meme.status}
+      {/* Pipeline Steps */}
+      {result && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold">Pipeline Results</h2>
+
+          {result.steps.map((step: any, i: number) => {
+            const visible = i < currentStep;
+            if (!visible) return null;
+
+            return (
+              <div key={i} className="card border-l-4" style={{
+                borderLeftColor: step.step === 7 ? "#22C55E" : step.step <= 3 ? "#3b82f6" : step.step <= 5 ? "#a855f7" : "#EAB308",
+              }}>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[var(--bg)]">
+                    Step {step.step}
                   </span>
-                  {meme.status === "draft" && (
-                    <button
-                      onClick={() => handleApprove(meme.id)}
-                      className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
-                    >
-                      Approve
-                    </button>
-                  )}
+                  <span className="text-sm font-medium">{step.title}</span>
                 </div>
+                <p className="text-sm text-[var(--muted)] mb-3">{step.description}</p>
+
+                {/* Step 1: Post */}
+                {step.step === 1 && (
+                  <div className="bg-[var(--bg)] rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-sm mb-2">
+                      <span className="px-2 py-0.5 rounded text-xs" style={{
+                        backgroundColor: `${PLATFORM_COLORS[step.data.platform] || "#6B7280"}20`,
+                        color: PLATFORM_COLORS[step.data.platform] || "#6B7280",
+                      }}>{step.data.platform}</span>
+                      <span className="font-medium">{step.data.author}</span>
+                    </div>
+                    <p className="text-sm">{step.data.content}</p>
+                  </div>
+                )}
+
+                {/* Step 2: Sentiment */}
+                {step.step === 2 && (
+                  <div className="flex items-center gap-4">
+                    <span className="text-2xl font-bold" style={{
+                      color: SENTIMENT_COLORS[step.data.label as keyof typeof SENTIMENT_COLORS] || "#6B7280"
+                    }}>
+                      {step.data.score > 0 ? "+" : ""}{step.data.score.toFixed(2)}
+                    </span>
+                    <span className="text-sm capitalize px-3 py-1 rounded-full" style={{
+                      backgroundColor: `${SENTIMENT_COLORS[step.data.label as keyof typeof SENTIMENT_COLORS] || "#6B7280"}20`,
+                      color: SENTIMENT_COLORS[step.data.label as keyof typeof SENTIMENT_COLORS] || "#6B7280",
+                    }}>{step.data.label}</span>
+                    {step.data.detail && (
+                      <div className="text-xs text-[var(--muted)]">
+                        +{(step.data.detail.positive * 100).toFixed(0)}% / -{(step.data.detail.negative * 100).toFixed(0)}% / ~{(step.data.detail.neutral * 100).toFixed(0)}%
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Step 3: Entities */}
+                {step.step === 3 && step.data.entities?.length > 0 && (
+                  <div className="flex gap-2 flex-wrap">
+                    {step.data.entities.map((ent: any, j: number) => (
+                      <span key={j} className="text-xs px-2 py-1 bg-purple-500/10 text-purple-400 rounded">
+                        {ent.name} ({ent.type})
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Step 4: Meme Identified */}
+                {step.step === 4 && (
+                  <div className="bg-[var(--bg)] rounded-lg p-3 space-y-2">
+                    <div className="flex gap-6">
+                      <div><span className="text-xs text-[var(--muted)]">Response Template</span>
+                        <div className="text-sm font-medium text-blue-400">{step.data.best_response_template || step.data.original_template}</div></div>
+                      <div><span className="text-xs text-[var(--muted)]">Humor Type</span>
+                        <div className="text-sm capitalize">{step.data.humor_type}</div></div>
+                      <div><span className="text-xs text-[var(--muted)]">Target Sentiment</span>
+                        <div className="text-sm capitalize">{step.data.target_sentiment}</div></div>
+                    </div>
+                    {step.data.response_angle && (
+                      <div><span className="text-xs text-[var(--muted)]">Response Angle</span>
+                        <div className="text-sm italic">{step.data.response_angle}</div></div>
+                    )}
+                  </div>
+                )}
+
+                {/* Step 5: Scenes */}
+                {step.step === 5 && (
+                  <div className="space-y-4">
+                    {step.data.panels?.map((panel: any) => (
+                      <div key={panel.panel} className="bg-[var(--bg)] rounded-lg p-3">
+                        <div className="text-xs text-[var(--muted)] mb-2">
+                          Panel {panel.panel}: <span className="text-blue-400">{panel.query}</span>
+                        </div>
+                        {panel.matches?.length > 0 ? (
+                          <div className="grid grid-cols-3 gap-2">
+                            {panel.matches.map((scene: any, j: number) => (
+                              <button key={j}
+                                onClick={() => setSelectedScenes(s => ({ ...s, [panel.panel]: j }))}
+                                className={`text-left p-2 rounded border transition-colors ${
+                                  selectedScenes[panel.panel] === j
+                                    ? "border-blue-500 bg-blue-500/10"
+                                    : "border-[var(--border)] hover:border-blue-500/50"
+                                }`}>
+                                <div className="text-xs font-medium">Scene {scene.scene_id}</div>
+                                <div className="text-[10px] text-blue-400">{(scene.similarity * 100).toFixed(1)}% match</div>
+                                <div className="text-[10px] text-[var(--muted)] mt-1 line-clamp-3">{scene.description}</div>
+                                {scene.mood && <div className="text-[10px] text-purple-400 mt-1">Mood: {scene.mood}</div>}
+                                <div className="text-[10px] text-[var(--muted)]">{scene.episode}</div>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-red-400">No matching scenes found for this panel</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Step 6: Text Options */}
+                {step.step === 6 && (
+                  <div className="space-y-2">
+                    {step.data.options?.map((opt: any, j: number) => (
+                      <button key={j}
+                        onClick={() => setSelectedText(j)}
+                        className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                          selectedText === j
+                            ? "border-green-500 bg-green-500/10"
+                            : "border-[var(--border)] hover:border-green-500/50"
+                        }`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs px-2 py-0.5 bg-yellow-500/10 text-yellow-400 rounded capitalize">{opt.tone}</span>
+                          {selectedText === j && <span className="text-xs text-green-400">Selected</span>}
+                        </div>
+                        <div className="text-sm font-medium">{opt.top_text}</div>
+                        <div className="text-sm font-medium mt-1">{opt.bottom_text}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Step 7: Approve */}
+                {step.step === 7 && (
+                  <div className="flex gap-3">
+                    <button className="px-6 py-2.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 font-medium">
+                      Approve & Queue
+                    </button>
+                    <button className="px-6 py-2.5 bg-yellow-600 text-white text-sm rounded-lg hover:bg-yellow-700">
+                      Edit
+                    </button>
+                    <button className="px-6 py-2.5 bg-red-600/80 text-white text-sm rounded-lg hover:bg-red-700">
+                      Reject
+                    </button>
+                    <button className="px-4 py-2.5 bg-[var(--bg)] border border-[var(--border)] text-sm rounded-lg hover:border-blue-500">
+                      Regenerate Text
+                    </button>
+                  </div>
+                )}
               </div>
-            ))
-          )}
+            );
+          })}
         </div>
       )}
     </div>
