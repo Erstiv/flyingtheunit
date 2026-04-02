@@ -8,7 +8,7 @@ celery_app = Celery(
     "flyingtheunit",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["app.tasks.collect", "app.tasks.process", "app.tasks.snapshot"],
+    include=["app.tasks.collect", "app.tasks.process", "app.tasks.snapshot", "app.tasks.meme"],
 )
 
 celery_app.conf.update(
@@ -29,5 +29,9 @@ celery_app.conf.beat_schedule = {
     "snapshot-volumes": {
         "task": "app.tasks.snapshot.take_volume_snapshots",
         "schedule": crontab(minute=0),  # every hour
+    },
+    "analyze-memes": {
+        "task": "app.tasks.meme.analyze_memes",
+        "schedule": crontab(minute="*/20"),  # every 20 minutes
     },
 }

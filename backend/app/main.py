@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import topics, posts, dashboard, graph
+from app.api import topics, posts, dashboard, graph, memes
 
 app = FastAPI(
     title="The Unit API",
@@ -20,6 +20,7 @@ app.include_router(topics.router, prefix="/api/topics", tags=["topics"])
 app.include_router(posts.router, prefix="/api/posts", tags=["posts"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(graph.router, prefix="/api/graph", tags=["graph"])
+app.include_router(memes.router, prefix="/api/memes", tags=["memes"])
 
 
 @app.get("/api/health")
