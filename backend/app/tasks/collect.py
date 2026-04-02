@@ -5,11 +5,13 @@ from sqlalchemy.dialects.postgresql import insert
 from app.worker import celery_app
 from app.core.config import get_settings
 from app.adapters.reddit import RedditAdapter
+from app.adapters.youtube import YouTubeAdapter
 from app.adapters.base import RawPost
 
 # Registry of available adapters
 ADAPTERS = {
     "reddit": RedditAdapter,
+    "youtube": YouTubeAdapter,
 }
 
 
