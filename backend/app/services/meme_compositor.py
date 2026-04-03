@@ -108,15 +108,15 @@ async def composite_top_bottom(scene_images: list[bytes], texts: list[str],
     for i, panel in enumerate(panels):
         canvas.paste(panel, (0, i * panel_height))
 
-    # Draw text
+    # Draw text — center within each panel
     draw = ImageDraw.Draw(canvas)
     if texts and len(texts) > 0 and texts[0]:
         draw_meme_text(draw, texts[0],
-                       (width // 2, panel_height // 6),
+                       (width // 2, panel_height // 2),
                        max_width=width, font_size=36)
     if texts and len(texts) > 1 and texts[1]:
         draw_meme_text(draw, texts[1],
-                       (width // 2, panel_height + panel_height * 5 // 6),
+                       (width // 2, panel_height + panel_height // 2),
                        max_width=width, font_size=36)
 
     # Save
