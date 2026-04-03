@@ -2,6 +2,7 @@
 import json
 import httpx
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +13,7 @@ from app.nlp.ner import extract_entities
 
 router = APIRouter()
 
-NARRALYTICA_API = "http://localhost:8005"
+NARRALYTICA_API = "http://host.docker.internal:8005"
 GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent"
 
 
@@ -133,6 +134,19 @@ Return JSON:
 
     template_name = meme_info.get("best_response_template") or meme_info.get("original_template") or "Drake Hotline Bling"
 
+    # Look up template image from our DB or Imgflip
+    template_image_url = None
+    try:
+        tmpl_result = await db.execute(text("""
+            SELECT source_url FROM meme_templates WHERE name ILIKE :name LIMIT 1
+        """), {"name": f"%{template_name}%"})
+        row = tmpl_result.fetchone()
+        if row:
+            template_image_url = row.source_url
+    except Exception:
+        pass
+
+    meme_info["template_image_url"] = template_image_url
     steps.append({
         "step": 4,
         "title": "Meme Identified",
@@ -200,7 +214,7 @@ Return a JSON array of 2 strings. Example:
                         "tone": scene.get("tone"),
                         "characters": scene.get("characters_present", []),
                         "similarity": round(r.get("similarity", 0), 3),
-                        "thumbnail_url": f"{NARRALYTICA_API}/api/media/thumbs/scene_{scene.get('id', 0):03d}.jpg",
+                        "thumbnail_url": f"/api/simulate/scene-thumb/{scene.get('id', 0)}",
                         "episode": r.get("episode_label", ""),
                     })
                 scenes.append({
@@ -329,3 +343,20 @@ PRESET_POSTS = [
 async def get_preset_posts():
     """Get preset simulated posts for demo."""
     return PRESET_POSTS
+
+
+@router.get("/scene-thumb/{scene_id}")
+async def proxy_scene_thumbnail(scene_id: int):
+    """Proxy Narralytica scene thumbnails so the frontend can display them."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(f"{NARRALYTICA_API}/api/media/thumbs/scene_{scene_id:03d}.jpg")
+            if resp.is_success:
+                return Response(content=resp.content, media_type="image/jpeg")
+            # Try without zero-padding
+            resp = await client.get(f"{NARRALYTICA_API}/api/media/thumbs/scene_{scene_id}.jpg")
+            if resp.is_success:
+                return Response(content=resp.content, media_type="image/jpeg")
+    except Exception:
+        pass
+    return Response(status_code=404)

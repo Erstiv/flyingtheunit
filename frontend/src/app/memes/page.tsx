@@ -203,19 +203,27 @@ export default function MemeLabPage() {
 
                 {/* Step 4: Meme Identified */}
                 {step.step === 4 && (
-                  <div className="bg-[var(--bg)] rounded-lg p-3 space-y-2">
-                    <div className="flex gap-6">
-                      <div><span className="text-xs text-[var(--muted)]">Response Template</span>
-                        <div className="text-sm font-medium text-blue-400">{step.data.best_response_template || step.data.original_template}</div></div>
-                      <div><span className="text-xs text-[var(--muted)]">Humor Type</span>
-                        <div className="text-sm capitalize">{step.data.humor_type}</div></div>
-                      <div><span className="text-xs text-[var(--muted)]">Target Sentiment</span>
-                        <div className="text-sm capitalize">{step.data.target_sentiment}</div></div>
+                  <div className="bg-[var(--bg)] rounded-lg p-3 space-y-3">
+                    <div className="flex gap-4">
+                      {step.data.template_image_url && (
+                        <img src={step.data.template_image_url} alt="Meme template"
+                          className="w-32 h-32 object-contain rounded border border-[var(--border)]" />
+                      )}
+                      <div className="space-y-2 flex-1">
+                        <div className="flex gap-6">
+                          <div><span className="text-xs text-[var(--muted)]">Response Template</span>
+                            <div className="text-sm font-medium text-blue-400">{step.data.best_response_template || step.data.original_template}</div></div>
+                          <div><span className="text-xs text-[var(--muted)]">Humor Type</span>
+                            <div className="text-sm capitalize">{step.data.humor_type}</div></div>
+                          <div><span className="text-xs text-[var(--muted)]">Target Sentiment</span>
+                            <div className="text-sm capitalize">{step.data.target_sentiment}</div></div>
+                        </div>
+                        {step.data.response_angle && (
+                          <div><span className="text-xs text-[var(--muted)]">Response Angle</span>
+                            <div className="text-sm italic">{step.data.response_angle}</div></div>
+                        )}
+                      </div>
                     </div>
-                    {step.data.response_angle && (
-                      <div><span className="text-xs text-[var(--muted)]">Response Angle</span>
-                        <div className="text-sm italic">{step.data.response_angle}</div></div>
-                    )}
                   </div>
                 )}
 
@@ -237,11 +245,16 @@ export default function MemeLabPage() {
                                     ? "border-blue-500 bg-blue-500/10"
                                     : "border-[var(--border)] hover:border-blue-500/50"
                                 }`}>
-                                <div className="text-xs font-medium">Scene {scene.scene_id}</div>
-                                <div className="text-[10px] text-blue-400">{(scene.similarity * 100).toFixed(1)}% match</div>
-                                <div className="text-[10px] text-[var(--muted)] mt-1 line-clamp-3">{scene.description}</div>
-                                {scene.mood && <div className="text-[10px] text-purple-400 mt-1">Mood: {scene.mood}</div>}
-                                <div className="text-[10px] text-[var(--muted)]">{scene.episode}</div>
+                                {scene.thumbnail_url && (
+                                  <img src={scene.thumbnail_url} alt={`Scene ${scene.scene_id}`}
+                                    className="w-full h-24 object-cover rounded mb-1" />
+                                )}
+                                <div className="flex items-center justify-between">
+                                  <div className="text-xs font-medium">Scene {scene.scene_id}</div>
+                                  <div className="text-[10px] text-blue-400">{(scene.similarity * 100).toFixed(1)}%</div>
+                                </div>
+                                <div className="text-[10px] text-[var(--muted)] mt-1 line-clamp-2">{scene.description}</div>
+                                {scene.mood && <div className="text-[10px] text-purple-400 mt-1">{scene.mood}</div>}
                               </button>
                             ))}
                           </div>

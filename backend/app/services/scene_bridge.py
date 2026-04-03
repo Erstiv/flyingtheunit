@@ -4,7 +4,7 @@ import json
 from app.core.config import get_settings
 
 # Narralytica API on Hetzner
-NARRALYTICA_API = "http://localhost:8005"
+NARRALYTICA_API = "http://host.docker.internal:8005"
 
 # Map property names to Narralytica show IDs
 PROPERTY_MAP = {
