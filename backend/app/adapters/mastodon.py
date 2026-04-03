@@ -1,3 +1,4 @@
+import re
 import httpx
 from datetime import datetime, timezone
 from app.adapters.base import AbstractAdapter, RawPost, UserProfile
@@ -22,16 +23,32 @@ class MastodonAdapter(AbstractAdapter):
 
         async with httpx.AsyncClient(timeout=15) as client:
             try:
-                params = {
-                    "q": query,
-                    "type": "statuses",
-                    "limit": min(limit, 40),
-                }
-                resp = await client.get(f"{MASTODON_API}/v2/search", params=params)
-                resp.raise_for_status()
-                data = resp.json()
+                # Use hashtag timeline (public, no auth required) as primary
+                # Convert query to hashtag: "The Wayfinders" -> "wayfinders"
+                hashtag = re.sub(r"[^a-zA-Z0-9]", "", query.split()[-1].lower())
 
-                for status in data.get("statuses", []):
+                statuses = []
+                # Try hashtag timeline first
+                resp = await client.get(
+                    f"{MASTODON_API}/v1/timelines/tag/{hashtag}",
+                    params={"limit": min(limit, 40)},
+                )
+                if resp.is_success:
+                    statuses = resp.json()
+
+                # Also try full-text search (works for cached/local content)
+                if len(statuses) < limit:
+                    resp2 = await client.get(
+                        f"{MASTODON_API}/v2/search",
+                        params={"q": query, "type": "statuses", "limit": min(limit, 40)},
+                    )
+                    if resp2.is_success:
+                        seen_ids = {s.get("id") for s in statuses}
+                        for s in resp2.json().get("statuses", []):
+                            if s.get("id") not in seen_ids:
+                                statuses.append(s)
+
+                for status in statuses:
                     created_str = status.get("created_at", "")
                     try:
                         created = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
@@ -48,7 +65,6 @@ class MastodonAdapter(AbstractAdapter):
                     # Strip HTML tags from content
                     content = status.get("content", "")
                     if content:
-                        import re
                         content = re.sub(r"<[^>]+>", " ", content).strip()
                         content = re.sub(r"\s+", " ", content)
 
