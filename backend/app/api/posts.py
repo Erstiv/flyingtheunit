@@ -8,6 +8,35 @@ from app.schemas.post import PostWithAnalysis
 router = APIRouter()
 
 
+@router.get("/{post_id}")
+async def get_post(post_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Get a single post by ID with analysis."""
+    result = await db.execute(text("""
+        SELECT p.*, pa.sentiment_score, pa.sentiment_label, pa.emotions, pa.entities
+        FROM posts p
+        LEFT JOIN post_analysis pa ON pa.post_id = p.id
+        WHERE p.id = :id
+    """), {"id": str(post_id)})
+    row = result.fetchone()
+    if not row:
+        raise HTTPException(404, "Post not found")
+    return {
+        "id": str(row.id),
+        "platform": row.platform,
+        "platform_id": row.platform_id,
+        "author_username": row.author_username,
+        "author_display_name": row.author_display_name,
+        "content": row.content,
+        "url": row.url,
+        "engagement": row.engagement or {},
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "sentiment_score": row.sentiment_score,
+        "sentiment_label": row.sentiment_label,
+        "emotions": row.emotions or {},
+        "entities": row.entities or [],
+    }
+
+
 @router.get("/search")
 async def search_posts(
     q: str,

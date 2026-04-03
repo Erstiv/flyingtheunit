@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { PLATFORM_COLORS, SENTIMENT_COLORS } from "@/lib/platform-colors";
 
 const PRESETS = [
@@ -54,9 +55,11 @@ function Lightbox({ src, alt, onClose }: { src: string; alt: string; onClose: ()
 }
 
 export default function MemeLabPage() {
+  const searchParams = useSearchParams();
   const [customPost, setCustomPost] = useState("");
   const [customAuthor, setCustomAuthor] = useState("u/test_user");
   const [customPlatform, setCustomPlatform] = useState("reddit");
+  const [loadedPost, setLoadedPost] = useState<any>(null);
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
@@ -148,6 +151,32 @@ export default function MemeLabPage() {
     }
   }, [selectedText, selectedScenes, generateComposite]);
 
+  // Auto-load post from URL param and run pipeline
+  useEffect(() => {
+    const postId = searchParams.get("post_id");
+    if (!postId || loadedPost) return;
+
+    (async () => {
+      try {
+        const resp = await fetch(`/api/posts/${postId}`);
+        if (!resp.ok) throw new Error("Post not found");
+        const post = await resp.json();
+        setLoadedPost(post);
+        setCustomPost(post.content);
+        setCustomAuthor(post.author_username || "unknown");
+        setCustomPlatform(post.platform || "reddit");
+        // Auto-run the pipeline
+        runSimulation({
+          post_text: post.content,
+          post_author: post.author_username || "unknown",
+          platform: post.platform || "reddit",
+        });
+      } catch (e: any) {
+        setError(`Failed to load post: ${e.message}`);
+      }
+    })();
+  }, [searchParams]);
+
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Lightbox */}
@@ -159,6 +188,28 @@ export default function MemeLabPage() {
           Simulate the full pipeline: detect &rarr; analyze &rarr; identify &rarr; match scenes &rarr; generate &rarr; approve
         </p>
       </div>
+
+      {/* Live post banner */}
+      {loadedPost && (
+        <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
+          <div className="text-xs text-purple-400 font-medium mb-2">RESPONDING TO LIVE POST</div>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="px-2 py-0.5 rounded text-xs" style={{
+              backgroundColor: `${PLATFORM_COLORS[loadedPost.platform] || "#6B7280"}20`,
+              color: PLATFORM_COLORS[loadedPost.platform] || "#6B7280",
+            }}>{loadedPost.platform}</span>
+            <span className="font-medium">{loadedPost.author_username}</span>
+            {loadedPost.created_at && (
+              <span className="text-[var(--muted)] text-xs">{new Date(loadedPost.created_at).toLocaleString()}</span>
+            )}
+          </div>
+          <p className="text-sm mt-2 line-clamp-3">{loadedPost.content}</p>
+          {loadedPost.url && (
+            <a href={loadedPost.url} target="_blank" rel="noopener noreferrer"
+              className="text-xs text-blue-400 hover:underline mt-2 inline-block">View original &rarr;</a>
+          )}
+        </div>
+      )}
 
       {/* Error toast */}
       {error && (

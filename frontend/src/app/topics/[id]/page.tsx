@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { getTopic, getTopicPosts, getTopicTimeline } from "@/lib/api";
 import { PLATFORM_COLORS, SENTIMENT_COLORS } from "@/lib/platform-colors";
 
 export default function TopicDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const topicId = params.id as string;
   const [topic, setTopic] = useState<any>(null);
   const [posts, setPosts] = useState<any>(null);
@@ -191,16 +192,24 @@ export default function TopicDetailPage() {
                   </div>
                 )}
               </div>
-              {post.url && (
-                <a
-                  href={post.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-blue-400 hover:underline mt-2 block"
+              <div className="flex items-center gap-3 mt-2">
+                {post.url && (
+                  <a
+                    href={post.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-400 hover:underline"
+                  >
+                    View original &rarr;
+                  </a>
+                )}
+                <button
+                  onClick={() => router.push(`/memes?post_id=${post.id}`)}
+                  className="text-xs px-2.5 py-1 bg-purple-600/80 text-white rounded hover:bg-purple-700 transition-colors"
                 >
-                  View original
-                </a>
-              )}
+                  Reply with Meme
+                </button>
+              </div>
             </div>
           ))}
 
