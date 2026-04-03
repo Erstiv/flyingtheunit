@@ -174,11 +174,12 @@ Return JSON:
 The original post said: "{req.post_text}"
 Response angle: {meme_info.get("response_angle", "positive response celebrating the show")}
 
-Generate 2 simple keyword searches (1-3 words each) to find scenes from "{req.property_name}".
-Use character names, emotions, or actions. Keep queries SHORT — these are keyword searches, not descriptions.
+The show's actual characters are: Zaya, Daryl, Flynn, Calibor, Oakleaf, Rip, Brinley, Coach Walter, Bedrick.
+
+Generate 2 simple keyword searches (1-2 words each) to find scenes. Use ONLY real character names from the list above, or simple emotions (angry, sad, excited, fighting, betrayal, triumph).
 
 Return a JSON array of 2 strings. Example:
-["frustrated", "celebrating"]"""
+["Zaya angry", "Flynn excited"]"""
 
                 resp = await client.post(
                     f"{GEMINI_API}?key={settings.gemini_api_key}",
