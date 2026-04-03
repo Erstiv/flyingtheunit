@@ -9,6 +9,8 @@ from app.adapters.youtube import YouTubeAdapter
 from app.adapters.bluesky import BlueskyAdapter
 from app.adapters.hackernews import HackerNewsAdapter
 from app.adapters.imgur import ImgurAdapter
+from app.adapters.mastodon import MastodonAdapter
+from app.adapters.googlenews import GoogleNewsAdapter
 from app.adapters.base import RawPost
 
 # Registry of available adapters
@@ -18,6 +20,8 @@ ADAPTERS = {
     "bluesky": BlueskyAdapter,
     "hackernews": HackerNewsAdapter,
     "imgur": ImgurAdapter,
+    "mastodon": MastodonAdapter,
+    "googlenews": GoogleNewsAdapter,
 }
 
 

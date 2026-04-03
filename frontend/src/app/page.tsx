@@ -151,10 +151,14 @@ export default function Dashboard() {
             </div>
           )}
           <div className="mt-4 pt-4 border-t border-[var(--border)]">
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <span className="text-xs px-2 py-0.5 bg-green-500/10 text-green-400 rounded">YouTube: Live</span>
-              <span className="text-xs px-2 py-0.5 bg-yellow-500/10 text-yellow-400 rounded">Reddit: Pending</span>
+              <span className="text-xs px-2 py-0.5 bg-green-500/10 text-green-400 rounded">HN: Live</span>
+              <span className="text-xs px-2 py-0.5 bg-green-500/10 text-green-400 rounded">Bluesky: Live</span>
+              <span className="text-xs px-2 py-0.5 bg-green-500/10 text-green-400 rounded">Mastodon: Live</span>
+              <span className="text-xs px-2 py-0.5 bg-green-500/10 text-green-400 rounded">News: Live</span>
               <span className="text-xs px-2 py-0.5 bg-green-500/10 text-green-400 rounded">Imgur: Live</span>
+              <span className="text-xs px-2 py-0.5 bg-yellow-500/10 text-yellow-400 rounded">Reddit: Pending</span>
             </div>
           </div>
         </div>
