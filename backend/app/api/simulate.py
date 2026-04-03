@@ -204,6 +204,8 @@ Return a JSON array of 2 strings. Example:
         panel_queries = ["angry", "excited"]
 
     # Search Narralytica for each panel
+    # Narralytica uses keyword search — multi-word queries often fail.
+    # Try the full query first, then individual words as fallback.
     scenes = []
     for i, query in enumerate(panel_queries):
         try:
@@ -215,6 +217,25 @@ Return a JSON array of 2 strings. Example:
                 )
                 resp.raise_for_status()
                 results = resp.json()
+
+                # If no results, try each word separately and combine
+                if not results:
+                    words = query.split()
+                    seen_ids = set()
+                    combined = []
+                    for word in words:
+                        wr = await client.post(
+                            f"{NARRALYTICA_API}/api/search/",
+                            json={"query": word, "show_id": req.show_id, "limit": 3, "min_confidence": 0.0},
+                            timeout=10,
+                        )
+                        if wr.is_success:
+                            for item in wr.json():
+                                sid = item.get("scene", {}).get("id")
+                                if sid and sid not in seen_ids:
+                                    seen_ids.add(sid)
+                                    combined.append(item)
+                    results = combined[:3]
                 panel_scenes = []
                 for r in results[:3]:
                     scene = r.get("scene", {})
