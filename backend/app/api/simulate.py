@@ -207,7 +207,7 @@ Return a JSON array of 2 strings. Example:
             async with httpx.AsyncClient(timeout=20) as client:
                 resp = await client.post(
                     f"{NARRALYTICA_API}/api/search/",
-                    json={"query": query, "show_id": req.show_id, "limit": 3},
+                    json={"query": query, "show_id": req.show_id, "limit": 3, "min_confidence": 0.0},
                     timeout=20,
                 )
                 resp.raise_for_status()
@@ -244,44 +244,50 @@ Return a JSON array of 2 strings. Example:
     # ── Step 6: Generate Text Options ──
     text_options = []
     if settings.gemini_api_key:
+        # Generate all 3 tones in a single Gemini call to avoid rate limits
         try:
-            async with httpx.AsyncClient(timeout=20) as client:
-                # Generate 3 different text options with different tones
-                for tone in ["snarky superfan", "wholesome enthusiast", "lore nerd"]:
-                    prompt = f"""You are a "{tone}" fan account for the TV show "{req.property_name}".
+            async with httpx.AsyncClient(timeout=25) as client:
+                prompt = f"""You are writing meme text for 3 different fan account personas for the TV show "{req.property_name}".
 
 Someone posted: "{req.post_text}"
 You're making a "{template_name}" meme response.
 
-Write meme text for the 2 panels. Keep each line under 10 words. Be funny and relevant.
+Write meme text for 3 different tones. Each has a top_text and bottom_text (under 10 words each). Be funny and relevant.
 
-Return JSON: {{"top_text": "...", "bottom_text": "...", "tone": "{tone}"}}"""
+Return a JSON array of 3 objects:
+[
+  {{"top_text": "...", "bottom_text": "...", "tone": "snarky superfan"}},
+  {{"top_text": "...", "bottom_text": "...", "tone": "wholesome enthusiast"}},
+  {{"top_text": "...", "bottom_text": "...", "tone": "lore nerd"}}
+]"""
 
-                    resp = await client.post(
-                        f"{GEMINI_API}?key={settings.gemini_api_key}",
-                        json={
-                            "contents": [{"parts": [{"text": prompt}]}],
-                            "generationConfig": {"temperature": 0.9, "maxOutputTokens": 150, "responseMimeType": "application/json"},
-                        },
-                        timeout=15,
-                    )
-                    resp.raise_for_status()
-                    result = resp.json()
-                    parts = result["candidates"][0]["content"]["parts"]
-                    text_out = ""
-                    for part in parts:
-                        if "text" in part:
-                            text_out = part["text"]
-                    option = json.loads(text_out)
-                    option["tone"] = tone
-                    text_options.append(option)
+                resp = await client.post(
+                    f"{GEMINI_API}?key={settings.gemini_api_key}",
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"temperature": 0.9, "maxOutputTokens": 400, "responseMimeType": "application/json"},
+                    },
+                    timeout=25,
+                )
+                resp.raise_for_status()
+                result = resp.json()
+                parts = result["candidates"][0]["content"]["parts"]
+                text_out = ""
+                for part in parts:
+                    if "text" in part:
+                        text_out = part["text"]
+                parsed = json.loads(text_out)
+                if isinstance(parsed, list):
+                    text_options = parsed
+                else:
+                    text_options = [parsed]
         except Exception as e:
-            text_options = [
-                {"top_text": "WHEN SOMEONE SAYS THEY HAVEN'T WATCHED IT", "bottom_text": "ME PLANNING A 12 HOUR MARATHON", "tone": "enthusiast"},
-            ]
-    else:
+            print(f"Text generation failed: {e}")
+    if not text_options:
         text_options = [
-            {"top_text": "THEM: IT'S JUST ANOTHER FANTASY SHOW", "bottom_text": "ME: YOU CLEARLY HAVEN'T MET THE CREW", "tone": "snarky"},
+            {"top_text": "THEM: IT'S JUST ANOTHER FANTASY SHOW", "bottom_text": "ME: YOU CLEARLY HAVEN'T MET THE CREW", "tone": "snarky superfan"},
+            {"top_text": "WHEN SOMEONE SAYS THEY HAVEN'T WATCHED IT", "bottom_text": "ME PLANNING A 12 HOUR MARATHON", "tone": "wholesome enthusiast"},
+            {"top_text": "CASUAL VIEWERS: IT'S A KIDS SHOW", "bottom_text": "ME: DID YOU CATCH THE EPISODE 4 FORESHADOWING", "tone": "lore nerd"},
         ]
 
     steps.append({
