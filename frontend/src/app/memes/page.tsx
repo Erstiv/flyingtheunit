@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { PLATFORM_COLORS, SENTIMENT_COLORS } from "@/lib/platform-colors";
 
 const PRESETS = [
@@ -31,6 +31,28 @@ const PRESETS = [
   },
 ];
 
+/* ── Lightbox Modal ── */
+function Lightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-8"
+      onClick={onClose}>
+      <div className="relative max-w-3xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+        <button onClick={onClose}
+          className="absolute -top-3 -right-3 w-8 h-8 bg-[var(--card)] border border-[var(--border)] rounded-full flex items-center justify-center text-white hover:bg-red-600 transition-colors text-sm">
+          &#10005;
+        </button>
+        <img src={src} alt={alt} className="max-w-full max-h-[85vh] rounded-lg shadow-2xl" />
+      </div>
+    </div>
+  );
+}
+
 export default function MemeLabPage() {
   const [customPost, setCustomPost] = useState("");
   const [customAuthor, setCustomAuthor] = useState("u/test_user");
@@ -42,6 +64,10 @@ export default function MemeLabPage() {
   const [selectedScenes, setSelectedScenes] = useState<Record<number, number>>({});
   const [approved, setApproved] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [compositeUrl, setCompositeUrl] = useState<string | null>(null);
+  const [compositing, setCompositing] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const runSimulation = async (post: any) => {
     setLoading(true);
@@ -50,6 +76,8 @@ export default function MemeLabPage() {
     setSelectedText(null);
     setSelectedScenes({});
     setApproved(false);
+    setCompositeUrl(null);
+    setError(null);
     try {
       const resp = await fetch("/api/simulate/run", {
         method: "POST",
@@ -63,6 +91,7 @@ export default function MemeLabPage() {
           show_id: 7,
         }),
       });
+      if (!resp.ok) throw new Error("Pipeline failed");
       const data = await resp.json();
       setResult(data);
       for (let i = 0; i < data.steps.length; i++) {
@@ -70,14 +99,60 @@ export default function MemeLabPage() {
         setCurrentStep(i + 1);
       }
     } catch (e: any) {
-      console.error(e);
+      setError(e.message || "Pipeline failed");
     } finally {
       setLoading(false);
     }
   };
 
+  /* Generate composite image when text + scenes are both selected */
+  const generateComposite = useCallback(async () => {
+    if (!result || selectedText === null) return;
+
+    const panels = result.steps[4]?.data?.panels;
+    if (!panels || panels.length < 2) return;
+
+    const scene1 = panels[0]?.matches?.[selectedScenes[1] || 0];
+    const scene2 = panels[1]?.matches?.[selectedScenes[2] || 0];
+    if (!scene1?.scene_id || !scene2?.scene_id) return;
+
+    const textOpt = result.steps[5]?.data?.options?.[selectedText];
+    if (!textOpt) return;
+
+    setCompositing(true);
+    try {
+      const resp = await fetch("/api/simulate/composite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scene_ids: [scene1.scene_id, scene2.scene_id],
+          top_text: textOpt.top_text,
+          bottom_text: textOpt.bottom_text,
+          layout: "top_bottom",
+        }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        setCompositeUrl(data.image_url);
+      }
+    } catch (e) {
+      console.error("Composite generation failed:", e);
+    } finally {
+      setCompositing(false);
+    }
+  }, [result, selectedText, selectedScenes]);
+
+  useEffect(() => {
+    if (selectedText !== null && result) {
+      generateComposite();
+    }
+  }, [selectedText, selectedScenes, generateComposite]);
+
   return (
     <div className="space-y-6 max-w-4xl">
+      {/* Lightbox */}
+      {lightboxSrc && <Lightbox src={lightboxSrc} alt="Preview" onClose={() => setLightboxSrc(null)} />}
+
       <div>
         <h1 className="text-2xl font-bold">Meme Lab</h1>
         <p className="text-sm text-[var(--muted)] mt-1">
@@ -85,10 +160,18 @@ export default function MemeLabPage() {
         </p>
       </div>
 
+      {/* Error toast */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg text-sm flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-300 ml-4">&#10005;</button>
+        </div>
+      )}
+
       {/* Preset posts */}
       <div className="card">
         <h3 className="text-sm font-medium text-[var(--muted)] mb-3">Quick Test &mdash; Preset Posts</h3>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {PRESETS.map((preset, i) => (
             <button
               key={i}
@@ -138,6 +221,20 @@ export default function MemeLabPage() {
         </div>
       </div>
 
+      {/* Loading skeleton */}
+      {loading && !result && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold">Pipeline Results</h2>
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="card animate-pulse">
+              <div className="h-4 w-24 bg-[var(--border)] rounded mb-3" />
+              <div className="h-3 w-64 bg-[var(--border)] rounded mb-2" />
+              <div className="h-12 bg-[var(--border)] rounded" />
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Pipeline Steps */}
       {result && (
         <div className="space-y-4">
@@ -148,8 +245,9 @@ export default function MemeLabPage() {
             if (!visible) return null;
 
             return (
-              <div key={i} className="card border-l-4" style={{
+              <div key={i} className="card border-l-4 animate-in" style={{
                 borderLeftColor: step.step === 7 ? "#22C55E" : step.step <= 3 ? "#3b82f6" : step.step <= 5 ? "#a855f7" : "#EAB308",
+                animation: "fadeSlideIn 0.3s ease-out",
               }}>
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[var(--bg)]">
@@ -210,10 +308,11 @@ export default function MemeLabPage() {
                     <div className="flex gap-4">
                       {step.data.template_image_url && (
                         <img src={step.data.template_image_url} alt="Meme template"
-                          className="w-32 h-32 object-contain rounded border border-[var(--border)]" />
+                          className="w-32 h-32 object-contain rounded border border-[var(--border)] cursor-pointer hover:opacity-80 transition-opacity"
+                          onClick={() => setLightboxSrc(step.data.template_image_url)} />
                       )}
                       <div className="space-y-2 flex-1">
-                        <div className="flex gap-6">
+                        <div className="flex gap-6 flex-wrap">
                           <div><span className="text-xs text-[var(--muted)]">Response Template</span>
                             <div className="text-sm font-medium text-blue-400">{step.data.best_response_template || step.data.original_template}</div></div>
                           <div><span className="text-xs text-[var(--muted)]">Humor Type</span>
@@ -229,7 +328,6 @@ export default function MemeLabPage() {
                           <div><span className="text-xs text-[var(--muted)]">Meme Context</span>
                             <div className="text-sm">{step.data.meme_description}</div></div>
                         )}
-                        {/* Explanation links */}
                         <div className="flex gap-3 pt-1">
                           {step.data.explanation_url && (
                             <a href={step.data.explanation_url} target="_blank" rel="noopener noreferrer"
@@ -242,7 +340,6 @@ export default function MemeLabPage() {
                         </div>
                       </div>
                     </div>
-
                     {/* Original triggering post reminder */}
                     {result.steps[0]?.data && (
                       <div className="border-t border-[var(--border)] pt-2 mt-2">
@@ -273,14 +370,23 @@ export default function MemeLabPage() {
                             {panel.matches.map((scene: any, j: number) => (
                               <button key={j}
                                 onClick={() => setSelectedScenes(s => ({ ...s, [panel.panel]: j }))}
-                                className={`text-left p-2 rounded border transition-colors ${
+                                className={`text-left p-2 rounded border transition-all ${
                                   selectedScenes[panel.panel] === j
-                                    ? "border-blue-500 bg-blue-500/10"
+                                    ? "border-blue-500 bg-blue-500/10 ring-1 ring-blue-500/30"
                                     : "border-[var(--border)] hover:border-blue-500/50"
                                 }`}>
                                 {scene.thumbnail_url && (
-                                  <img src={scene.thumbnail_url} alt={`Scene ${scene.scene_id}`}
-                                    className="w-full h-24 object-cover rounded mb-1" />
+                                  <div className="relative group">
+                                    <img src={scene.thumbnail_url} alt={`Scene ${scene.scene_id}`}
+                                      className="w-full h-24 object-cover rounded mb-1"
+                                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                    />
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setLightboxSrc(scene.thumbnail_url); }}
+                                      className="absolute top-1 right-1 w-6 h-6 bg-black/60 rounded flex items-center justify-center text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity">
+                                      &#x26F6;
+                                    </button>
+                                  </div>
                                 )}
                                 <div className="flex items-center justify-between">
                                   <div className="text-xs font-medium">Scene {scene.scene_id}</div>
@@ -288,6 +394,7 @@ export default function MemeLabPage() {
                                 </div>
                                 <div className="text-[10px] text-[var(--muted)] mt-1 line-clamp-2">{scene.description}</div>
                                 {scene.mood && <div className="text-[10px] text-purple-400 mt-1">{scene.mood}</div>}
+                                {scene.episode && <div className="text-[10px] text-[var(--muted)]">{scene.episode}</div>}
                               </button>
                             ))}
                           </div>
@@ -305,14 +412,14 @@ export default function MemeLabPage() {
                     {step.data.options?.map((opt: any, j: number) => (
                       <button key={j}
                         onClick={() => setSelectedText(j)}
-                        className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                        className={`w-full text-left p-3 rounded-lg border transition-all ${
                           selectedText === j
-                            ? "border-green-500 bg-green-500/10"
+                            ? "border-green-500 bg-green-500/10 ring-1 ring-green-500/30"
                             : "border-[var(--border)] hover:border-green-500/50"
                         }`}>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs px-2 py-0.5 bg-yellow-500/10 text-yellow-400 rounded capitalize">{opt.tone}</span>
-                          {selectedText === j && <span className="text-xs text-green-400">Selected</span>}
+                          {selectedText === j && <span className="text-xs text-green-400 font-medium">Selected</span>}
                         </div>
                         <div className="text-sm font-medium">{opt.top_text}</div>
                         <div className="text-sm font-medium mt-1">{opt.bottom_text}</div>
@@ -324,102 +431,114 @@ export default function MemeLabPage() {
                 {/* Step 7: Preview & Approve */}
                 {step.step === 7 && (
                   <div className="space-y-4">
-                    {/* Meme Preview */}
+                    {/* Meme Preview — composited image or fallback */}
                     {selectedText !== null && result.steps[5]?.data?.options?.[selectedText] && (
                       <div className="bg-[var(--bg)] rounded-lg p-4">
-                        <div className="text-xs text-[var(--muted)] mb-2">MEME PREVIEW</div>
-                        <div className="max-w-sm mx-auto">
-                          {/* Template image or placeholder */}
-                          {result.steps[3]?.data?.template_image_url ? (
-                            <div className="relative">
-                              <img src={result.steps[3].data.template_image_url} alt="Meme template"
-                                className="w-full rounded opacity-30" />
-                              <div className="absolute inset-0 flex flex-col justify-between p-4">
-                                <div className="text-center font-bold text-white text-lg drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] uppercase">
-                                  {result.steps[5].data.options[selectedText].top_text}
-                                </div>
-                                <div className="text-center font-bold text-white text-lg drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] uppercase">
-                                  {result.steps[5].data.options[selectedText].bottom_text}
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="bg-gray-800 rounded p-6 space-y-4">
-                              {/* Panel 1 */}
-                              <div className="bg-gray-700 rounded p-3 text-center">
-                                {result.steps[4]?.data?.panels?.[0]?.matches?.[selectedScenes[1] || 0]?.description ? (
-                                  <div className="text-xs text-[var(--muted)] italic mb-2">
-                                    Scene: {result.steps[4].data.panels[0].matches[selectedScenes[1] || 0].description.slice(0, 80)}...
-                                  </div>
-                                ) : (
-                                  <div className="text-xs text-[var(--muted)] italic mb-2">[Scene from Wayfinders]</div>
-                                )}
-                                <div className="font-bold text-white uppercase">
-                                  {result.steps[5].data.options[selectedText].top_text}
-                                </div>
-                              </div>
-                              {/* Panel 2 */}
-                              <div className="bg-gray-700 rounded p-3 text-center">
-                                {result.steps[4]?.data?.panels?.[1]?.matches?.[selectedScenes[2] || 0]?.description ? (
-                                  <div className="text-xs text-[var(--muted)] italic mb-2">
-                                    Scene: {result.steps[4].data.panels[1].matches[selectedScenes[2] || 0].description.slice(0, 80)}...
-                                  </div>
-                                ) : (
-                                  <div className="text-xs text-[var(--muted)] italic mb-2">[Scene from Wayfinders]</div>
-                                )}
-                                <div className="font-bold text-white uppercase">
-                                  {result.steps[5].data.options[selectedText].bottom_text}
-                                </div>
-                              </div>
+                        <div className="text-xs text-[var(--muted)] mb-3">MEME PREVIEW</div>
+                        <div className="max-w-md mx-auto">
+                          {compositing && (
+                            <div className="flex items-center justify-center h-48 bg-[var(--card)] rounded-lg">
+                              <div className="text-sm text-[var(--muted)] animate-pulse">Generating meme image...</div>
                             </div>
                           )}
-                          <div className="text-center mt-2 text-xs text-[var(--muted)]">
+                          {compositeUrl && !compositing && (
+                            <img
+                              src={compositeUrl}
+                              alt="Generated meme"
+                              className="w-full rounded-lg shadow-lg cursor-pointer hover:opacity-90 transition-opacity"
+                              onClick={() => setLightboxSrc(compositeUrl)}
+                            />
+                          )}
+                          {!compositeUrl && !compositing && (
+                            /* Fallback: show scene thumbnails with text overlay */
+                            <div className="space-y-1">
+                              {[0, 1].map((panelIdx) => {
+                                const panel = result.steps[4]?.data?.panels?.[panelIdx];
+                                const sceneIdx = selectedScenes[panelIdx + 1] || 0;
+                                const scene = panel?.matches?.[sceneIdx];
+                                const textLine = panelIdx === 0
+                                  ? result.steps[5].data.options[selectedText].top_text
+                                  : result.steps[5].data.options[selectedText].bottom_text;
+
+                                return (
+                                  <div key={panelIdx} className="relative">
+                                    {scene?.thumbnail_url ? (
+                                      <img src={scene.thumbnail_url} alt={`Panel ${panelIdx + 1}`}
+                                        className="w-full h-48 object-cover rounded"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).style.display = "none";
+                                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
+                                        }}
+                                      />
+                                    ) : null}
+                                    <div className={`${scene?.thumbnail_url ? "hidden" : ""} w-full h-48 bg-gray-800 rounded flex items-center justify-center`}>
+                                      <span className="text-xs text-[var(--muted)]">[Scene from Wayfinders]</span>
+                                    </div>
+                                    <div className="absolute inset-0 flex items-center justify-center p-4">
+                                      <div className="text-center font-bold text-white text-lg uppercase"
+                                        style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.9), -1px -1px 2px rgba(0,0,0,0.9)" }}>
+                                        {textLine}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          <div className="text-center mt-3 text-xs text-[var(--muted)]">
                             Template: {result.summary?.template} | Voice: {result.steps[5].data.options[selectedText].tone}
                           </div>
                         </div>
                       </div>
                     )}
                     {selectedText === null && (
-                      <div className="text-sm text-yellow-400">Select text from Step 6 above to see meme preview</div>
+                      <div className="text-sm text-yellow-400 bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-3">
+                        Select text from Step 6 above to see meme preview
+                      </div>
                     )}
 
                     {/* Action buttons */}
                     {!approved ? (
-                      <div className="flex gap-3">
+                      <div className="flex gap-3 flex-wrap">
                         <button
                           onClick={async () => {
                             if (selectedText === null) return;
                             setApproving(true);
                             try {
                               const textOpt = result.steps[5].data.options[selectedText];
-                              await fetch("/api/memes/generate", {
+                              const resp = await fetch("/api/memes/generate", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({
                                   template_id: "demo",
                                   top_text: textOpt.top_text,
                                   bottom_text: textOpt.bottom_text,
-                                  topic_id: result.steps[4]?.data?.panels?.[0]?.matches?.[0]?.scene?.topic_id || null,
+                                  topic_id: null,
                                   target_platforms: ["reddit", "youtube"],
                                 }),
                               });
+                              if (!resp.ok) throw new Error("Failed to queue");
                               setApproved(true);
-                            } catch (e) { console.error(e); }
-                            finally { setApproving(false); }
+                            } catch (e: any) {
+                              setError(e.message || "Failed to queue meme");
+                            } finally {
+                              setApproving(false);
+                            }
                           }}
                           disabled={selectedText === null || approving}
-                          className="px-6 py-2.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 font-medium disabled:opacity-50">
+                          className="px-6 py-2.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 font-medium disabled:opacity-50 transition-colors">
                           {approving ? "Queuing..." : "Approve & Queue for Posting"}
                         </button>
                         <button
-                          onClick={() => { setResult(null); setCurrentStep(0); }}
-                          className="px-6 py-2.5 bg-red-600/80 text-white text-sm rounded-lg hover:bg-red-700">
+                          onClick={() => { setResult(null); setCurrentStep(0); setCompositeUrl(null); }}
+                          className="px-6 py-2.5 bg-red-600/80 text-white text-sm rounded-lg hover:bg-red-700 transition-colors">
                           Reject
                         </button>
                         <button
-                          onClick={() => runSimulation(PRESETS[0])}
-                          className="px-4 py-2.5 bg-[var(--bg)] border border-[var(--border)] text-sm rounded-lg hover:border-blue-500">
-                          Regenerate
+                          onClick={() => generateComposite()}
+                          disabled={selectedText === null || compositing}
+                          className="px-4 py-2.5 bg-[var(--bg)] border border-[var(--border)] text-sm rounded-lg hover:border-purple-500 disabled:opacity-50 transition-colors">
+                          {compositing ? "Generating..." : "Regenerate Image"}
                         </button>
                       </div>
                     ) : (
@@ -428,7 +547,8 @@ export default function MemeLabPage() {
                           <span className="text-lg">&#10003;</span> Meme approved and queued for posting
                         </div>
                         <div className="text-xs text-[var(--muted)] mt-1">
-                          Will be posted via WayfinderNerd to Reddit and YouTube
+                          Will be posted via WayfinderNerd to Reddit and YouTube.{" "}
+                          <a href="/queue" className="text-blue-400 hover:underline">View Queue &rarr;</a>
                         </div>
                       </div>
                     )}
@@ -437,6 +557,14 @@ export default function MemeLabPage() {
               </div>
             );
           })}
+
+          {/* Step progress indicator while loading */}
+          {loading && currentStep < (result?.steps?.length || 7) && (
+            <div className="card animate-pulse border-l-4 border-l-[var(--border)]">
+              <div className="h-4 w-32 bg-[var(--border)] rounded mb-2" />
+              <div className="h-3 w-48 bg-[var(--border)] rounded" />
+            </div>
+          )}
         </div>
       )}
     </div>

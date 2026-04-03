@@ -31,7 +31,31 @@ export default function Dashboard() {
     );
   }
 
-  if (!data) return <div className="text-[var(--muted)]">Loading dashboard...</div>;
+  if (!data) return (
+    <div className="space-y-6">
+      <div className="h-8 w-48 bg-[var(--border)] rounded animate-pulse" />
+      <div className="grid grid-cols-5 gap-4">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="card animate-pulse">
+            <div className="h-3 w-20 bg-[var(--border)] rounded mb-3" />
+            <div className="h-8 w-16 bg-[var(--border)] rounded" />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="card animate-pulse">
+            <div className="h-3 w-24 bg-[var(--border)] rounded mb-4" />
+            <div className="space-y-3">
+              <div className="h-3 bg-[var(--border)] rounded" />
+              <div className="h-3 bg-[var(--border)] rounded" />
+              <div className="h-3 bg-[var(--border)] rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   const { sentiment_breakdown: sb } = data;
   const sentimentTotal = sb.positive + sb.negative + sb.neutral + sb.mixed || 1;

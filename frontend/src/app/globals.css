@@ -20,3 +20,14 @@ body {
 .card {
   @apply bg-[var(--card)] border border-[var(--border)] rounded-xl p-5;
 }
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

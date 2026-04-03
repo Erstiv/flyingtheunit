@@ -2,7 +2,8 @@
 import json
 import httpx
 from fastapi import APIRouter, Depends
-from fastapi.responses import Response
+from fastapi.responses import Response, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,8 @@ from app.core.database import get_db
 from app.core.config import get_settings
 from app.nlp.sentiment import analyze_sentiment
 from app.nlp.ner import extract_entities
+from app.services.meme_compositor import composite_meme, download_image_bytes, ensure_output_dir, OUTPUT_DIR
+import os
 
 router = APIRouter()
 
@@ -364,4 +367,45 @@ async def proxy_scene_thumbnail(scene_id: int):
                 return Response(content=resp.content, media_type="image/jpeg")
     except Exception:
         pass
+    return Response(status_code=404)
+
+
+class CompositeRequest(BaseModel):
+    """Request to composite a meme image server-side."""
+    scene_ids: list[int]  # scene IDs for each panel
+    top_text: str = ""
+    bottom_text: str = ""
+    layout: str = "top_bottom"  # top_bottom or side_by_side
+
+
+@router.post("/composite")
+async def composite_meme_endpoint(req: CompositeRequest):
+    """Generate a composited meme image from scene thumbnails + text.
+
+    Returns the URL path to the generated image.
+    """
+    # Build scene thumbnail URLs
+    scene_urls = [
+        f"{NARRALYTICA_API}/api/media/thumbs/scene_{sid:03d}.jpg"
+        for sid in req.scene_ids
+    ]
+
+    texts = [req.top_text, req.bottom_text]
+    result_path = await composite_meme(req.layout, scene_urls, texts)
+
+    if not result_path:
+        return Response(status_code=500, content="Failed to generate meme")
+
+    filename = os.path.basename(result_path)
+    return {"image_url": f"/api/simulate/generated/{filename}"}
+
+
+@router.get("/generated/{filename}")
+async def serve_generated_meme(filename: str):
+    """Serve a generated meme image."""
+    # Sanitize filename to prevent path traversal
+    safe_name = os.path.basename(filename)
+    path = os.path.join(OUTPUT_DIR, safe_name)
+    if os.path.exists(path):
+        return FileResponse(path, media_type="image/jpeg")
     return Response(status_code=404)

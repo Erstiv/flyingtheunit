@@ -8,11 +8,14 @@ NARRALYTICA_API = "http://host.docker.internal:8005"
 
 # Map property names to Narralytica show IDs
 PROPERTY_MAP = {
-    "the wayfinders": 1,
-    "wayfinders": 1,
-    "wingfeather": 2,
-    "wingfeather saga": 2,
-    "homestead": 3,
+    "the wayfinders": 7,
+    "wayfinders": 7,
+    "wingfeather": 8,
+    "wingfeather saga": 8,
+    "the wingfeather saga": 8,
+    "homestead": 6,
+    "homestead: the series": 6,
+    "danger 5": 2,
 }
 
 GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent"
