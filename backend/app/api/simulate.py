@@ -217,14 +217,24 @@ Return a JSON array of 2 strings. Example:
                 panel_scenes = []
                 for r in results[:3]:
                     scene = r.get("scene", {})
+                    scene_id = scene.get("id", 0)
+                    # Build thumbnail URL from scene's thumbnail_path
+                    thumb_path = scene.get("thumbnail_path", "")
+                    if thumb_path:
+                        # thumbnail_path is like /app/media/thumbs/ep_827/scene_34.jpg
+                        # Narralytica serves it at /api/media-static/thumbs/ep_xxx/scene_yy.jpg
+                        relative = thumb_path.replace("/app/media/", "")
+                        thumb_url = f"/api/simulate/scene-thumb-path/{relative}"
+                    else:
+                        thumb_url = f"/api/simulate/scene-thumb/{scene_id}"
                     panel_scenes.append({
-                        "scene_id": scene.get("id"),
+                        "scene_id": scene_id,
                         "description": scene.get("description_text", "")[:200],
                         "mood": scene.get("mood_ambience"),
                         "tone": scene.get("tone"),
                         "characters": scene.get("characters_present", []),
                         "similarity": round(r.get("similarity", 0), 3),
-                        "thumbnail_url": f"/api/simulate/scene-thumb/{scene.get('id', 0)}",
+                        "thumbnail_url": thumb_url,
                         "episode": r.get("episode_label", ""),
                     })
                 scenes.append({
@@ -363,14 +373,30 @@ async def get_preset_posts():
 
 @router.get("/scene-thumb/{scene_id}")
 async def proxy_scene_thumbnail(scene_id: int):
-    """Proxy Narralytica scene thumbnails so the frontend can display them."""
+    """Proxy Narralytica scene thumbnails by looking up the scene's thumbnail_path."""
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(f"{NARRALYTICA_API}/api/media/thumbs/scene_{scene_id:03d}.jpg")
-            if resp.is_success:
-                return Response(content=resp.content, media_type="image/jpeg")
-            # Try without zero-padding
-            resp = await client.get(f"{NARRALYTICA_API}/api/media/thumbs/scene_{scene_id}.jpg")
+            # Get the scene data to find its thumbnail_path
+            scene_resp = await client.get(f"{NARRALYTICA_API}/api/scenes/{scene_id}")
+            if scene_resp.is_success:
+                scene_data = scene_resp.json()
+                thumb_path = scene_data.get("thumbnail_path", "")
+                if thumb_path:
+                    relative = thumb_path.replace("/app/media/", "")
+                    resp = await client.get(f"{NARRALYTICA_API}/api/media-static/{relative}")
+                    if resp.is_success:
+                        return Response(content=resp.content, media_type="image/jpeg")
+    except Exception:
+        pass
+    return Response(status_code=404)
+
+
+@router.get("/scene-thumb-path/{path:path}")
+async def proxy_scene_thumbnail_by_path(path: str):
+    """Proxy Narralytica scene thumbnails by direct media path."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(f"{NARRALYTICA_API}/api/media-static/{path}")
             if resp.is_success:
                 return Response(content=resp.content, media_type="image/jpeg")
     except Exception:
@@ -392,11 +418,21 @@ async def composite_meme_endpoint(req: CompositeRequest):
 
     Returns the URL path to the generated image.
     """
-    # Build scene thumbnail URLs
-    scene_urls = [
-        f"{NARRALYTICA_API}/api/media/thumbs/scene_{sid:03d}.jpg"
-        for sid in req.scene_ids
-    ]
+    # Build scene thumbnail URLs by looking up each scene's thumbnail_path
+    scene_urls = []
+    async with httpx.AsyncClient(timeout=15) as client:
+        for sid in req.scene_ids:
+            try:
+                scene_resp = await client.get(f"{NARRALYTICA_API}/api/scenes/{sid}")
+                if scene_resp.is_success:
+                    thumb_path = scene_resp.json().get("thumbnail_path", "")
+                    if thumb_path:
+                        relative = thumb_path.replace("/app/media/", "")
+                        scene_urls.append(f"{NARRALYTICA_API}/api/media-static/{relative}")
+                        continue
+            except Exception:
+                pass
+            scene_urls.append(None)
 
     texts = [req.top_text, req.bottom_text]
     result_path = await composite_meme(req.layout, scene_urls, texts)
