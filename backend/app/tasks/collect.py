@@ -1,9 +1,51 @@
 import asyncio
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import text
 from app.worker import celery_app
 from app.core.config import get_settings
+
+# Common words to ignore when checking relevance
+STOP_WORDS = {
+    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "by", "from", "is", "it", "as", "was", "are", "be",
+    "has", "had", "have", "not", "this", "that", "they", "we", "you",
+    "all", "can", "will", "do", "if", "my", "so", "no", "up", "out",
+    "new", "one", "its", "his", "her", "our", "who", "how", "what",
+    "when", "just", "about", "over", "into", "than", "them", "then",
+    "very", "season", "series", "show", "episode", "watch",
+}
+
+
+def is_relevant(content: str, keywords: list[str]) -> bool:
+    """Check if post content is actually relevant to the topic keywords.
+
+    Requires at least one significant keyword (not a stop word, 4+ chars)
+    to appear in the content. For multi-word keywords like 'The Wayfinders',
+    checks for the full phrase OR the significant words.
+    """
+    if not content:
+        return False
+
+    content_lower = content.lower()
+
+    for keyword in keywords:
+        # First: check if the full keyword phrase appears
+        if keyword.lower() in content_lower:
+            return True
+
+        # Second: extract significant words (4+ chars, not stop words)
+        significant = [
+            w.lower() for w in keyword.split()
+            if len(w) >= 4 and w.lower() not in STOP_WORDS
+        ]
+
+        # Require ALL significant words to appear (not just any one)
+        if significant and all(w in content_lower for w in significant):
+            return True
+
+    return False
 from app.adapters.reddit import RedditAdapter
 from app.adapters.youtube import YouTubeAdapter
 from app.adapters.bluesky import BlueskyAdapter
@@ -101,9 +143,12 @@ def collect_for_topic(topic_id: str, topic_name: str, keywords: list[str], platf
                     )
                     loop.close()
                     if posts:
-                        count = store_posts(session, posts, topic_id)
-                        total_collected += count
-                        print(f"[{platform_name}] Collected {count} posts for '{keyword}'")
+                        # Filter for relevance — must actually mention topic keywords
+                        relevant = [p for p in posts if is_relevant(p.content or "", keywords)]
+                        if relevant:
+                            count = store_posts(session, relevant, topic_id)
+                            total_collected += count
+                            print(f"[{platform_name}] Collected {count}/{len(posts)} relevant posts for '{keyword}'")
 
                         # Queue NLP processing for new posts
                         from app.tasks.process import process_unanalyzed_posts

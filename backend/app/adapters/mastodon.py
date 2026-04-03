@@ -48,18 +48,7 @@ class MastodonAdapter(AbstractAdapter):
                             if s.get("id") not in seen_ids:
                                 statuses.append(s)
 
-                # Filter: only keep posts that actually mention the query terms
-                query_words = [w.lower() for w in query.split() if len(w) > 2]
-
                 for status in statuses:
-                    # Check relevance — content or tags must mention query
-                    content_text = re.sub(r"<[^>]+>", " ", status.get("content", "")).lower()
-                    tag_names = [t.get("name", "").lower() for t in status.get("tags", [])]
-                    all_text = content_text + " " + " ".join(tag_names)
-
-                    if not any(word in all_text for word in query_words):
-                        continue  # Skip irrelevant posts
-
                     created_str = status.get("created_at", "")
                     try:
                         created = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
