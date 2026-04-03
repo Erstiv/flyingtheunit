@@ -90,9 +90,12 @@ def collect_for_topic(topic_id: str, topic_name: str, keywords: list[str], platf
 
             for keyword in keywords:
                 try:
-                    posts = asyncio.get_event_loop().run_until_complete(
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    posts = loop.run_until_complete(
                         adapter.search(query=keyword, since=since, limit=50)
                     )
+                    loop.close()
                     if posts:
                         count = store_posts(session, posts, topic_id)
                         total_collected += count
