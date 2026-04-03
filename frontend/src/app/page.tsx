@@ -11,16 +11,27 @@ export default function Dashboard() {
   const [data, setData] = useState<any>(null);
   const [topics, setTopics] = useState<any[]>([]);
   const [recentPosts, setRecentPosts] = useState<any[]>([]);
+  const [feedPage, setFeedPage] = useState(1);
+  const [feedTotal, setFeedTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const loadPosts = async (topicList: any[], page: number, append: boolean = false) => {
+    if (topicList.length === 0) return;
+    setLoadingMore(true);
+    try {
+      const feed = await getTopicPosts(topicList[0].id, { page_size: "20", page: String(page) });
+      setRecentPosts(prev => append ? [...prev, ...(feed.posts || [])] : (feed.posts || []));
+      setFeedTotal(feed.total || 0);
+    } catch (e) { console.error(e); }
+    finally { setLoadingMore(false); }
+  };
 
   useEffect(() => {
     getDashboard().then(setData).catch((e) => setError(e.message));
-    getTopics().then(async (topics) => {
-      setTopics(topics);
-      if (topics.length > 0) {
-        const feed = await getTopicPosts(topics[0].id, { page_size: "8" });
-        setRecentPosts(feed.posts || []);
-      }
+    getTopics().then(async (topicList) => {
+      setTopics(topicList);
+      loadPosts(topicList, 1);
     }).catch(console.error);
   }, []);
 
@@ -250,6 +261,19 @@ export default function Dashboard() {
                 )}
               </div>
             ))}
+            {/* Load More */}
+            {recentPosts.length < feedTotal && (
+              <button
+                onClick={() => {
+                  const nextPage = feedPage + 1;
+                  setFeedPage(nextPage);
+                  loadPosts(topics, nextPage, true);
+                }}
+                disabled={loadingMore}
+                className="w-full py-2 text-sm text-blue-400 hover:text-blue-300 bg-[var(--bg)] rounded-lg transition-colors disabled:opacity-50 mt-2">
+                {loadingMore ? "Loading..." : `Load more (${recentPosts.length} of ${feedTotal})`}
+              </button>
+            )}
           </div>
         )}
       </div>
