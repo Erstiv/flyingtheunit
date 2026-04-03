@@ -40,6 +40,8 @@ export default function MemeLabPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedText, setSelectedText] = useState<number | null>(null);
   const [selectedScenes, setSelectedScenes] = useState<Record<number, number>>({});
+  const [approved, setApproved] = useState(false);
+  const [approving, setApproving] = useState(false);
 
   const runSimulation = async (post: any) => {
     setLoading(true);
@@ -47,6 +49,7 @@ export default function MemeLabPage() {
     setCurrentStep(0);
     setSelectedText(null);
     setSelectedScenes({});
+    setApproved(false);
     try {
       const resp = await fetch("/api/simulate/run", {
         method: "POST",
@@ -288,21 +291,117 @@ export default function MemeLabPage() {
                   </div>
                 )}
 
-                {/* Step 7: Approve */}
+                {/* Step 7: Preview & Approve */}
                 {step.step === 7 && (
-                  <div className="flex gap-3">
-                    <button className="px-6 py-2.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 font-medium">
-                      Approve & Queue
-                    </button>
-                    <button className="px-6 py-2.5 bg-yellow-600 text-white text-sm rounded-lg hover:bg-yellow-700">
-                      Edit
-                    </button>
-                    <button className="px-6 py-2.5 bg-red-600/80 text-white text-sm rounded-lg hover:bg-red-700">
-                      Reject
-                    </button>
-                    <button className="px-4 py-2.5 bg-[var(--bg)] border border-[var(--border)] text-sm rounded-lg hover:border-blue-500">
-                      Regenerate Text
-                    </button>
+                  <div className="space-y-4">
+                    {/* Meme Preview */}
+                    {selectedText !== null && result.steps[5]?.data?.options?.[selectedText] && (
+                      <div className="bg-[var(--bg)] rounded-lg p-4">
+                        <div className="text-xs text-[var(--muted)] mb-2">MEME PREVIEW</div>
+                        <div className="max-w-sm mx-auto">
+                          {/* Template image or placeholder */}
+                          {result.steps[3]?.data?.template_image_url ? (
+                            <div className="relative">
+                              <img src={result.steps[3].data.template_image_url} alt="Meme template"
+                                className="w-full rounded opacity-30" />
+                              <div className="absolute inset-0 flex flex-col justify-between p-4">
+                                <div className="text-center font-bold text-white text-lg drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] uppercase">
+                                  {result.steps[5].data.options[selectedText].top_text}
+                                </div>
+                                <div className="text-center font-bold text-white text-lg drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] uppercase">
+                                  {result.steps[5].data.options[selectedText].bottom_text}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="bg-gray-800 rounded p-6 space-y-4">
+                              {/* Panel 1 */}
+                              <div className="bg-gray-700 rounded p-3 text-center">
+                                {result.steps[4]?.data?.panels?.[0]?.matches?.[selectedScenes[1] || 0]?.description ? (
+                                  <div className="text-xs text-[var(--muted)] italic mb-2">
+                                    Scene: {result.steps[4].data.panels[0].matches[selectedScenes[1] || 0].description.slice(0, 80)}...
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-[var(--muted)] italic mb-2">[Scene from Wayfinders]</div>
+                                )}
+                                <div className="font-bold text-white uppercase">
+                                  {result.steps[5].data.options[selectedText].top_text}
+                                </div>
+                              </div>
+                              {/* Panel 2 */}
+                              <div className="bg-gray-700 rounded p-3 text-center">
+                                {result.steps[4]?.data?.panels?.[1]?.matches?.[selectedScenes[2] || 0]?.description ? (
+                                  <div className="text-xs text-[var(--muted)] italic mb-2">
+                                    Scene: {result.steps[4].data.panels[1].matches[selectedScenes[2] || 0].description.slice(0, 80)}...
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-[var(--muted)] italic mb-2">[Scene from Wayfinders]</div>
+                                )}
+                                <div className="font-bold text-white uppercase">
+                                  {result.steps[5].data.options[selectedText].bottom_text}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          <div className="text-center mt-2 text-xs text-[var(--muted)]">
+                            Template: {result.summary?.template} | Voice: {result.steps[5].data.options[selectedText].tone}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {selectedText === null && (
+                      <div className="text-sm text-yellow-400">Select text from Step 6 above to see meme preview</div>
+                    )}
+
+                    {/* Action buttons */}
+                    {!approved ? (
+                      <div className="flex gap-3">
+                        <button
+                          onClick={async () => {
+                            if (selectedText === null) return;
+                            setApproving(true);
+                            try {
+                              const textOpt = result.steps[5].data.options[selectedText];
+                              await fetch("/api/memes/generate", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  template_id: "demo",
+                                  top_text: textOpt.top_text,
+                                  bottom_text: textOpt.bottom_text,
+                                  topic_id: result.steps[4]?.data?.panels?.[0]?.matches?.[0]?.scene?.topic_id || null,
+                                  target_platforms: ["reddit", "youtube"],
+                                }),
+                              });
+                              setApproved(true);
+                            } catch (e) { console.error(e); }
+                            finally { setApproving(false); }
+                          }}
+                          disabled={selectedText === null || approving}
+                          className="px-6 py-2.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 font-medium disabled:opacity-50">
+                          {approving ? "Queuing..." : "Approve & Queue for Posting"}
+                        </button>
+                        <button
+                          onClick={() => { setResult(null); setCurrentStep(0); }}
+                          className="px-6 py-2.5 bg-red-600/80 text-white text-sm rounded-lg hover:bg-red-700">
+                          Reject
+                        </button>
+                        <button
+                          onClick={() => runSimulation(PRESETS[0])}
+                          className="px-4 py-2.5 bg-[var(--bg)] border border-[var(--border)] text-sm rounded-lg hover:border-blue-500">
+                          Regenerate
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+                        <div className="flex items-center gap-2 text-green-400 font-medium">
+                          <span className="text-lg">&#10003;</span> Meme approved and queued for posting
+                        </div>
+                        <div className="text-xs text-[var(--muted)] mt-1">
+                          Will be posted via WayfinderNerd to Reddit and YouTube
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
