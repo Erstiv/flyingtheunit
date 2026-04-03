@@ -168,6 +168,39 @@ async def approve_meme(meme_id: UUID, db: AsyncSession = Depends(get_db)):
     return {"status": "approved"}
 
 
+@router.post("/queue/{meme_id}/unapprove")
+async def unapprove_meme(meme_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Revoke approval — move back to pending review."""
+    await db.execute(text("""
+        UPDATE meme_queue SET status = 'pending_review', approved_at = NULL
+        WHERE id = :id
+    """), {"id": str(meme_id)})
+    await db.commit()
+    return {"status": "pending_review"}
+
+
+@router.post("/queue/{meme_id}/reject")
+async def reject_meme(meme_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Reject a meme."""
+    await db.execute(text("""
+        UPDATE meme_queue SET status = 'rejected'
+        WHERE id = :id
+    """), {"id": str(meme_id)})
+    await db.commit()
+    return {"status": "rejected"}
+
+
+@router.post("/queue/{meme_id}/repost")
+async def repost_meme(meme_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Requeue a posted or failed meme for reposting."""
+    await db.execute(text("""
+        UPDATE meme_queue SET status = 'approved', posted_at = NULL
+        WHERE id = :id
+    """), {"id": str(meme_id)})
+    await db.commit()
+    return {"status": "approved"}
+
+
 @router.get("/template-stats/{topic_id}")
 async def get_template_stats(topic_id: UUID, db: AsyncSession = Depends(get_db)):
     """Get which meme templates are being used most for a topic."""

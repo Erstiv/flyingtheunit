@@ -147,6 +147,11 @@ Return JSON:
         pass
 
     meme_info["template_image_url"] = template_image_url
+    # Add Know Your Meme / explanation link
+    safe_name = template_name.replace(" ", "-").replace("'", "").lower()
+    meme_info["explanation_url"] = f"https://en.meming.world/wiki/{template_name.replace(' ', '_')}"
+    meme_info["knowyourmeme_url"] = f"https://knowyourmeme.com/memes/{safe_name}"
+
     steps.append({
         "step": 4,
         "title": "Meme Identified",

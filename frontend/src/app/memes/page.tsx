@@ -225,8 +225,38 @@ export default function MemeLabPage() {
                           <div><span className="text-xs text-[var(--muted)]">Response Angle</span>
                             <div className="text-sm italic">{step.data.response_angle}</div></div>
                         )}
+                        {step.data.meme_description && (
+                          <div><span className="text-xs text-[var(--muted)]">Meme Context</span>
+                            <div className="text-sm">{step.data.meme_description}</div></div>
+                        )}
+                        {/* Explanation links */}
+                        <div className="flex gap-3 pt-1">
+                          {step.data.explanation_url && (
+                            <a href={step.data.explanation_url} target="_blank" rel="noopener noreferrer"
+                              className="text-xs text-blue-400 hover:underline">Meme Explanation &rarr;</a>
+                          )}
+                          {step.data.knowyourmeme_url && (
+                            <a href={step.data.knowyourmeme_url} target="_blank" rel="noopener noreferrer"
+                              className="text-xs text-blue-400 hover:underline">Know Your Meme &rarr;</a>
+                          )}
+                        </div>
                       </div>
                     </div>
+
+                    {/* Original triggering post reminder */}
+                    {result.steps[0]?.data && (
+                      <div className="border-t border-[var(--border)] pt-2 mt-2">
+                        <div className="text-[10px] text-[var(--muted)] mb-1">ORIGINAL POST THAT TRIGGERED THIS</div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="px-1.5 py-0.5 rounded" style={{
+                            backgroundColor: `${PLATFORM_COLORS[result.steps[0].data.platform] || "#6B7280"}20`,
+                            color: PLATFORM_COLORS[result.steps[0].data.platform] || "#6B7280",
+                          }}>{result.steps[0].data.platform}</span>
+                          <span className="font-medium">{result.steps[0].data.author}</span>
+                        </div>
+                        <p className="text-xs text-[var(--muted)] mt-1 italic line-clamp-2">{result.steps[0].data.content}</p>
+                      </div>
+                    )}
                   </div>
                 )}
 
