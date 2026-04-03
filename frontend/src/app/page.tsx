@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { getDashboard, getTopics, getTopicPosts } from "@/lib/api";
 import { PLATFORM_COLORS, SENTIMENT_COLORS } from "@/lib/platform-colors";
 
 export default function Dashboard() {
+  const router = useRouter();
   const [data, setData] = useState<any>(null);
   const [topics, setTopics] = useState<any[]>([]);
   const [recentPosts, setRecentPosts] = useState<any[]>([]);
@@ -206,7 +208,7 @@ export default function Dashboard() {
         ) : (
           <div className="space-y-2">
             {recentPosts.map((post: any) => (
-              <div key={post.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-[var(--bg)] transition-colors">
+              <div key={post.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-[var(--bg)] transition-colors group">
                 <div className="shrink-0 mt-1">
                   <div className="w-2 h-2 rounded-full"
                     style={{
@@ -228,6 +230,16 @@ export default function Dashboard() {
                     )}
                   </div>
                   <p className="text-sm text-[var(--muted)] mt-0.5 line-clamp-1">{post.content}</p>
+                  <div className="flex items-center gap-3 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {post.url && (
+                      <a href={post.url} target="_blank" rel="noopener noreferrer"
+                        className="text-[10px] text-blue-400 hover:underline">View original &rarr;</a>
+                    )}
+                    <button onClick={() => router.push(`/memes?post_id=${post.id}`)}
+                      className="text-[10px] px-2 py-0.5 bg-purple-600/80 text-white rounded hover:bg-purple-700 transition-colors">
+                      Reply with Meme
+                    </button>
+                  </div>
                 </div>
                 {post.sentiment_label && (
                   <span className="shrink-0 text-[10px] capitalize px-1.5 py-0.5 rounded"
