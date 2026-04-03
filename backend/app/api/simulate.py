@@ -163,27 +163,28 @@ Return JSON:
     })
 
     # ── Step 5: Scene Matching from Narralytica ──
-    # Generate panel queries
+    # Generate panel queries — use SHORT keywords (1-3 words) because
+    # Narralytica uses keyword search for shows without embeddings
     panel_queries = []
     if settings.gemini_api_key:
         try:
             async with httpx.AsyncClient(timeout=20) as client:
-                prompt = f"""For a "{template_name}" meme response about "{req.property_name}", I need to find matching video scenes.
+                prompt = f"""For a "{template_name}" meme response about "{req.property_name}", I need to search for matching video scenes.
 
 The original post said: "{req.post_text}"
 Response angle: {meme_info.get("response_angle", "positive response celebrating the show")}
 
-Generate 2 search queries to find matching emotional scenes from the TV show "{req.property_name}".
-Each query should describe the mood/emotion needed for that panel (5-15 words).
+Generate 2 simple keyword searches (1-3 words each) to find scenes from "{req.property_name}".
+Use character names, emotions, or actions. Keep queries SHORT — these are keyword searches, not descriptions.
 
 Return a JSON array of 2 strings. Example:
-["character looking frustrated or disappointed with something", "character celebrating or looking triumphant and happy"]"""
+["frustrated", "celebrating"]"""
 
                 resp = await client.post(
                     f"{GEMINI_API}?key={settings.gemini_api_key}",
                     json={
                         "contents": [{"parts": [{"text": prompt}]}],
-                        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 150, "responseMimeType": "application/json"},
+                        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 100, "responseMimeType": "application/json"},
                     },
                     timeout=20,
                 )
@@ -196,9 +197,10 @@ Return a JSON array of 2 strings. Example:
                         text_out = part["text"]
                 panel_queries = json.loads(text_out)
         except Exception as e:
-            panel_queries = ["character looking disappointed or sad", "character looking excited or happy"]
+            print(f"Panel query generation failed: {e}")
+            panel_queries = ["angry", "excited"]
     else:
-        panel_queries = ["character looking disappointed or sad", "character looking excited or happy"]
+        panel_queries = ["angry", "excited"]
 
     # Search Narralytica for each panel
     scenes = []
