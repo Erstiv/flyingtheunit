@@ -4,34 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { PLATFORM_COLORS, SENTIMENT_COLORS } from "@/lib/platform-colors";
 
-const PRESETS = [
-  {
-    name: "Positive Fan Post",
-    post_text: "I can't stop rewatching The Wayfinders. Every time I notice something new. This show is genuinely better than most big-budget fantasy series and it's not even close.",
-    post_author: "u/wayfinders_obsessed",
-    platform: "reddit",
-  },
-  {
-    name: "Negative Criticism",
-    post_text: "Honestly The Wayfinders season 1 was overhyped. The pacing was slow and the CGI looked cheap compared to what Disney and Netflix are doing. Not sure why everyone keeps recommending it.",
-    post_author: "u/honest_tv_reviews",
-    platform: "reddit",
-  },
-  {
-    name: "Meme Post (Drake)",
-    post_text: "Watching generic streaming fantasy shows vs Watching The Wayfinders for the 5th time this month",
-    post_author: "u/meme_lord_tv",
-    platform: "reddit",
-    meme_template: "Drake Hotline Bling",
-  },
-  {
-    name: "YouTube Comment",
-    post_text: "This scene made me cry actual tears. The way they animated Zaya's face when she realizes what she has to do... Angel Studios doesn't get enough credit for what they've done here.",
-    post_author: "AnimationFanatic",
-    platform: "youtube",
-  },
-];
-
 /* ── Lightbox Modal ── */
 function Lightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
   useEffect(() => {
@@ -219,34 +191,13 @@ export default function MemeLabPage() {
         </div>
       )}
 
-      {/* Preset posts */}
+      {/* Custom post — or use "Reply with Meme" from Dashboard/Topics */}
+      {!loadedPost && (
       <div className="card">
-        <h3 className="text-sm font-medium text-[var(--muted)] mb-3">Quick Test &mdash; Preset Posts</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {PRESETS.map((preset, i) => (
-            <button
-              key={i}
-              onClick={() => runSimulation(preset)}
-              disabled={loading}
-              className="text-left p-3 bg-[var(--bg)] border border-[var(--border)] rounded-lg hover:border-blue-500 transition-colors disabled:opacity-50"
-            >
-              <div className="text-sm font-medium">{preset.name}</div>
-              <div className="text-xs text-[var(--muted)] mt-1 line-clamp-2">{preset.post_text}</div>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-[10px] px-1.5 py-0.5 rounded" style={{
-                  backgroundColor: `${PLATFORM_COLORS[preset.platform] || "#6B7280"}20`,
-                  color: PLATFORM_COLORS[preset.platform] || "#6B7280",
-                }}>{preset.platform}</span>
-                <span className="text-[10px] text-[var(--muted)]">{preset.post_author}</span>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Custom post */}
-      <div className="card">
-        <h3 className="text-sm font-medium text-[var(--muted)] mb-3">Custom Post</h3>
+        <h3 className="text-sm font-medium text-[var(--muted)] mb-3">Simulate a Post</h3>
+        <p className="text-xs text-[var(--muted)] mb-3">
+          Paste any social media post below, or use <a href="/" className="text-blue-400 hover:underline">Reply with Meme</a> from the Dashboard or Topics pages to auto-load a real post.
+        </p>
         <textarea
           value={customPost}
           onChange={(e) => setCustomPost(e.target.value)}
@@ -271,6 +222,7 @@ export default function MemeLabPage() {
           </button>
         </div>
       </div>
+      )}
 
       {/* Loading skeleton */}
       {loading && !result && (
