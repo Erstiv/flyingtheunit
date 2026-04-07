@@ -45,6 +45,9 @@ services:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - narralytica
     depends_on:
       flyingtheunit-db:
         condition: service_healthy
@@ -78,6 +81,9 @@ services:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - narralytica
     depends_on:
       flyingtheunit-db:
         condition: service_healthy
@@ -116,3 +122,9 @@ services:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
+
+networks:
+  default:
+  narralytica:
+    external: true
+    name: narralytica_default
