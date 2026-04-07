@@ -16,7 +16,7 @@ import os
 
 router = APIRouter()
 
-NARRALYTICA_API = "http://host.docker.internal:8005"
+NARRALYTICA_API = "http://narralytica-backend:8005"
 GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent"
 
 
